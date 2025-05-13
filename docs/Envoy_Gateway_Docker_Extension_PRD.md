@@ -406,8 +406,8 @@ Main Extension Panel
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: [Current Date]  
-**Next Review**: [Date + 1 month]  
-**Document Owner**: [Product Manager Name]  
+**Document Version**: 1.0
+**Last Updated**: [Current Date]
+**Next Review**: [Date + 1 month]
+**Document Owner**: Saptak Sen(@saptak)
 **Stakeholders**: Envoy Gateway Team, Docker Desktop Team, Developer Community
