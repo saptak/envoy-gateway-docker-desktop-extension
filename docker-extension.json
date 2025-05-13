@@ -1,0 +1,35 @@
+{
+  "icon": "docker.svg",
+  "vm": {
+    "host": true,
+    "ui": {
+      "dashboard-tab": {
+        "title": "Envoy Gateway",
+        "root": "/ui",
+        "src": "dist/frontend/index.html"
+      }
+    }
+  },
+  "host": {
+    "binaries": [
+      {
+        "darwin": [
+          {
+            "path": "/host/dist/backend/binary-darwin"
+          }
+        ],
+        "linux": [
+          {
+            "path": "/host/dist/backend/binary-linux"
+          }
+        ],
+        "windows": [
+          {
+            "path": "/host/dist/backend/binary-windows.exe"
+          }
+        ]
+      }
+    ],
+    "socket": "envoy-gateway-extension.sock"
+  }
+}

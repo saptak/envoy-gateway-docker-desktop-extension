@@ -1,0 +1,127 @@
+{
+  "name": "envoy-gateway-docker-extension",
+  "version": "1.0.0",
+  "description": "Docker Desktop extension for Envoy Gateway development and management",
+  "main": "dist/backend/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "nodemon --exec ts-node src/backend/index.ts",
+    "dev:frontend": "cd src/frontend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "tsc -p src/backend/tsconfig.json",
+    "build:frontend": "cd src/frontend && npm run build",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src --ext .ts,.tsx,.js,.jsx",
+    "lint:fix": "eslint src --ext .ts,.tsx,.js,.jsx --fix",
+    "type-check": "tsc --noEmit",
+    "docker:build": "docker build -t envoy-gateway-extension .",
+    "docker:install": "docker extension install .",
+    "docker:uninstall": "docker extension uninstall envoy-gateway-extension",
+    "docker:update": "docker extension update envoy-gateway-extension",
+    "clean": "rimraf dist coverage",
+    "prepare": "husky install",
+    "release": "semantic-release",
+    "storybook": "start-storybook -p 6006",
+    "build-storybook": "build-storybook"
+  },
+  "keywords": [
+    "docker",
+    "extension",
+    "envoy",
+    "gateway",
+    "kubernetes",
+    "api-gateway",
+    "microservices"
+  ],
+  "author": "Envoy Gateway Community",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/envoyproxy/gateway-docker-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/envoyproxy/gateway-docker-extension/issues"
+  },
+  "homepage": "https://github.com/envoyproxy/gateway-docker-extension#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^6.1.5",
+    "compression": "^1.7.4",
+    "morgan": "^1.10.0",
+    "ws": "^8.13.0",
+    "dockerode": "^3.3.5",
+    "js-yaml": "^4.1.0",
+    "uuid": "^9.0.0",
+    "winston": "^3.9.0",
+    "joi": "^17.9.2",
+    "axios": "^1.4.0",
+    "lodash": "^4.17.21",
+    "jsonschema": "^1.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.2.5",
+    "@types/express": "^4.17.17",
+    "@types/cors": "^2.8.13",
+    "@types/compression": "^1.7.2",
+    "@types/morgan": "^1.9.4",
+    "@types/ws": "^8.5.4",
+    "@types/dockerode": "^3.3.19",
+    "@types/js-yaml": "^4.0.5",
+    "@types/uuid": "^9.0.2",
+    "@types/lodash": "^4.14.195",
+    "@types/jest": "^29.5.2",
+    "@typescript-eslint/eslint-plugin": "^5.59.9",
+    "@typescript-eslint/parser": "^5.59.9",
+    "typescript": "^5.1.3",
+    "ts-node": "^10.9.1",
+    "nodemon": "^2.0.22",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.42.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-prettier": "^4.2.1",
+    "prettier": "^2.8.8",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.2.2",
+    "rimraf": "^5.0.1",
+    "concurrently": "^8.2.0",
+    "semantic-release": "^21.0.3",
+    "@semantic-release/github": "^8.1.0",
+    "@storybook/react": "^6.5.16",
+    "@storybook/addon-actions": "^6.5.16",
+    "@storybook/addon-essentials": "^6.5.16",
+    "@storybook/addon-controls": "^6.5.16",
+    "@storybook/builder-webpack5": "^6.5.16",
+    "@storybook/manager-webpack5": "^6.5.16"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged",
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "volta": {
+    "node": "18.17.0",
+    "npm": "9.7.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
