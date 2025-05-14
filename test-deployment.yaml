@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app
+  namespace: envoy-gateway-extension
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-app
+  template:
+    metadata:
+      labels:
+        app: test-app
+    spec:
+      containers:
+      - name: app
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html
+        configMap:
+          name: test-app-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-app-html
+  namespace: envoy-gateway-extension
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html>
+    <head><title>Envoy Gateway Test App</title></head>
+    <body>
+        <h1>Hello from Envoy Gateway Extension!</h1>
+        <p>This is a test application running through Envoy Gateway on Docker Desktop.</p>
+        <p>Timestamp: $(date)</p>
+        <script>
+        // Simple connectivity test
+        console.log('Test app loaded at:', new Date());
+        </script>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-app-service
+  namespace: envoy-gateway-extension
+spec:
+  selector:
+    app: test-app
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: test-gateway
+  namespace: envoy-gateway-extension
+spec:
+  gatewayClassName: envoy-gateway
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: test-route
+  namespace: envoy-gateway-extension
+spec:
+  parentRefs:
+  - name: test-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: test-app-service
+      port: 80

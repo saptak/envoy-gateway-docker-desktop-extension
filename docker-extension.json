@@ -1,35 +1,42 @@
 {
-  "icon": "docker.svg",
-  "vm": {
-    "host": true,
-    "ui": {
-      "dashboard-tab": {
-        "title": "Envoy Gateway",
-        "root": "/ui",
-        "src": "dist/frontend/index.html"
-      }
-    }
-  },
-  "host": {
-    "binaries": [
+  "dockerDesktopExtensionMetadata": {
+    "name": "Envoy Gateway",
+    "icon": "./icon.svg",
+    "description": "Manage Envoy Gateway resources with a modern, intuitive interface",
+    "company": "Envoy Gateway Community",
+    "version": "1.0.0",
+    "authors": [
       {
-        "darwin": [
-          {
-            "path": "/host/dist/backend/binary-darwin"
-          }
-        ],
-        "linux": [
-          {
-            "path": "/host/dist/backend/binary-linux"
-          }
-        ],
-        "windows": [
-          {
-            "path": "/host/dist/backend/binary-windows.exe"
-          }
-        ]
+        "name": "Envoy Gateway Team"
       }
     ],
-    "socket": "envoy-gateway-extension.sock"
+    "license": "Apache-2.0",
+    "categories": [
+      "Kubernetes",
+      "Networking",
+      "Gateway"
+    ],
+    "homepage": "https://gateway.envoyproxy.io",
+    "support": "https://github.com/envoyproxy/gateway/issues",
+    "repository": "https://github.com/saptak/envoy-gateway-docker-desktop-extension"
+  },
+  "ui": {
+    "dashboard-tab": {
+      "title": "Envoy Gateway",
+      "root": "/ui",
+      "src": "dist/index.html"
+    }
+  },
+  "vm": {
+    "image": "envoy-gateway-extension:latest",
+    "ports": {
+      "3001": {
+        "description": "API Server"
+      },
+      "3000": {
+        "description": "Frontend Server"
+      }
+    },
+    "composefile": "docker-compose.yml"
   }
 }

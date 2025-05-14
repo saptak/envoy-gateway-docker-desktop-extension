@@ -3,53 +3,29 @@ version: '3.8'
 services:
   envoy-gateway-extension:
     build: .
+    image: envoy-gateway-extension:latest
+    container_name: envoy-gateway-extension
     ports:
-      - "8080:8080"
+      - "3001:3001"  # Backend API
+      - "3000:3000"  # Frontend
     environment:
-      - NODE_ENV=development
-      - PORT=8080
-      - LOG_LEVEL=debug
+      - NODE_ENV=production
+      - PORT=3001
+      - FRONTEND_PORT=3000
+      - KUBE_CONFIG_PATH=/app/.kube/config
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./src:/app/src
-      - ./docs:/app/docs
-    networks:
-      - envoy-gateway-network
-
-  # Example backend service for testing
-  sample-backend:
-    image: nginx:alpine
-    ports:
-      - "8081:80"
-    volumes:
-      - ./examples/nginx.conf:/etc/nginx/nginx.conf
-    networks:
-      - envoy-gateway-network
-
-  # Jaeger for tracing (optional)
-  jaeger:
-    image: jaegertracing/all-in-one:latest
-    ports:
-      - "16686:16686"
-      - "14268:14268"
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
-    networks:
-      - envoy-gateway-network
-
-  # Prometheus for metrics (optional)
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./examples/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ~/.kube/config:/app/.kube/config:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
     networks:
       - envoy-gateway-network
 
 networks:
   envoy-gateway-network:
     driver: bridge
-
-volumes:
-  envoy-data:
