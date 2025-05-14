@@ -1,17 +1,18 @@
+import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
-import useApi from '../../hooks/useApi';
-import uiReducer from '../../store/slices/uiSlice';
-import systemReducer from '../../store/slices/systemSlice';
-import gatewayReducer from '../../store/slices/gatewaySlice';
-import routeReducer from '../../store/slices/routeSlice';
-import containerReducer from '../../store/slices/containerSlice';
-import monitoringReducer from '../../store/slices/monitoringSlice';
-import testingReducer from '../../store/slices/testingSlice';
+import useApi from '../../src/hooks/useApi';
+import uiReducer from '../../src/store/slices/uiSlice';
+import systemReducer from '../../src/store/slices/systemSlice';
+import gatewayReducer from '../../src/store/slices/gatewaySlice';
+import routeReducer from '../../src/store/slices/routeSlice';
+import containerReducer from '../../src/store/slices/containerSlice';
+import monitoringReducer from '../../src/store/slices/monitoringSlice';
+import testingReducer from '../../src/store/slices/testingSlice';
 
 // Mock API service
-jest.mock('../../services/api', () => ({
+jest.mock('../../src/services/api', () => ({
   apiService: {
     getSystemStatus: jest.fn(),
     getGateways: jest.fn(),
@@ -20,6 +21,7 @@ jest.mock('../../services/api', () => ({
     getMetrics: jest.fn(),
     getLogs: jest.fn(),
     getTestCollections: jest.fn(),
+    getTestRuns: jest.fn(),
     createGateway: jest.fn(),
     updateGateway: jest.fn(),
     deleteGateway: jest.fn(),
@@ -30,7 +32,7 @@ jest.mock('../../services/api', () => ({
     startContainer: jest.fn(),
     stopContainer: jest.fn(),
     removeContainer: jest.fn(),
-    fetchContainerLogs: jest.fn(),
+    getContainerLogs: jest.fn(),
     fetchMetrics: jest.fn(),
     fetchMetricsHistory: jest.fn(),
     fetchLogs: jest.fn(),
@@ -65,7 +67,7 @@ const TestWrapper: React.FC<{ children: React.ReactNode; store?: any }> = ({
   children,
   store = createTestStore()
 }) => {
-  return <Provider store={store}>{children}</Provider>;
+  return React.createElement(Provider, { store }, children);
 };
 
 describe('useApi hooks', () => {
@@ -75,7 +77,7 @@ describe('useApi hooks', () => {
 
   describe('useSystemStatus', () => {
     test('should fetch system status on mount', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const mockStatus = {
         docker: { connected: true },
         kubernetes: { connected: true },
@@ -101,7 +103,7 @@ describe('useApi hooks', () => {
     });
 
     test('should handle errors gracefully', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       apiService.getSystemStatus.mockRejectedValue(new Error('Connection failed'));
 
       const { result } = renderHook(() => useApi.useSystemStatus(), {
@@ -118,7 +120,7 @@ describe('useApi hooks', () => {
 
   describe('useGateways', () => {
     test('should fetch gateways on mount', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const mockGateways = [
         { id: 'gw1', name: 'gateway1', namespace: 'default' },
         { id: 'gw2', name: 'gateway2', namespace: 'production' },
@@ -141,7 +143,7 @@ describe('useApi hooks', () => {
     });
 
     test('should create gateway successfully', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const newGateway = { name: 'test-gateway', namespace: 'default' };
       const createdGateway = { id: 'gw3', ...newGateway };
 
@@ -160,7 +162,7 @@ describe('useApi hooks', () => {
     });
 
     test('should handle create errors', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const newGateway = { name: 'test-gateway', namespace: 'default' };
 
       apiService.createGateway.mockRejectedValue(new Error('Failed to create'));
@@ -178,7 +180,7 @@ describe('useApi hooks', () => {
 
   describe('useContainers', () => {
     test('should manage container lifecycle', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const mockContainers = [
         { id: 'c1', name: 'container1', state: 'stopped' },
         { id: 'c2', name: 'container2', state: 'running' },
@@ -207,7 +209,7 @@ describe('useApi hooks', () => {
     });
 
     test('should fetch container logs', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const mockLogs = ['log line 1', 'log line 2'];
 
       apiService.getContainers.mockResolvedValue([]);
@@ -227,7 +229,7 @@ describe('useApi hooks', () => {
 
   describe('useMonitoring', () => {
     test('should fetch metrics and logs', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const mockMetrics = {
         timestamp: Date.now(),
         gateways: { total: 2, healthy: 2, unhealthy: 0 },
@@ -254,8 +256,12 @@ describe('useApi hooks', () => {
         },
       });
 
+      const WrappedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+        return React.createElement(TestWrapper, { store }, children);
+      };
+
       const { result } = renderHook(() => useApi.useMonitoring(), {
-        wrapper: ({ children }) => { return <TestWrapper store={store}>{children}</TestWrapper>; },
+        wrapper: WrappedProvider,
       });
 
       await act(async () => {
@@ -267,7 +273,7 @@ describe('useApi hooks', () => {
     });
 
     test('should respect auto-refresh setting', () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       apiService.getMetrics.mockResolvedValue({});
       apiService.getLogs.mockResolvedValue([]);
 
@@ -284,8 +290,12 @@ describe('useApi hooks', () => {
         },
       });
 
+      const WrappedProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+        return React.createElement(TestWrapper, { store }, children);
+      };
+
       const { unmount } = renderHook(() => useApi.useMonitoring(), {
-        wrapper: ({ children }) => { return <TestWrapper store={store}>{children}</TestWrapper>; },
+        wrapper: WrappedProvider,
       });
 
       // Should set up interval when autoRefresh is true
@@ -298,7 +308,7 @@ describe('useApi hooks', () => {
 
   describe('useTesting', () => {
     test('should manage test collections', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const mockCollections = [
         { id: '1', name: 'Test Collection 1', tests: [] },
         { id: '2', name: 'Test Collection 2', tests: [] },
@@ -325,7 +335,7 @@ describe('useApi hooks', () => {
     });
 
     test('should create and run test collections', async () => {
-      const { apiService } = require('../../services/api');
+      const { apiService } = require('../../src/services/api');
       const newCollection = { name: 'New Collection', description: 'Test description', tests: [] };
       const createdCollection = { id: '3', ...newCollection };
       const testRun = { id: 'run2', collectionId: '3', status: 'running' };

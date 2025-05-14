@@ -2,11 +2,11 @@ import { apiService } from '../../../__mocks__/apiService';
 import { webSocketService } from '../../../__mocks__/websocketService';
 
 // Mock the services
-jest.mock('../../services/api', () => ({
+jest.mock('../../src/services/api', () => ({
   apiService: require('../../../__mocks__/apiService').apiService,
 }));
 
-jest.mock('../../services/websocket', () => ({
+jest.mock('../../src/services/websocket', () => ({
   webSocketService: require('../../../__mocks__/websocketService').webSocketService,
 }));
 
@@ -15,7 +15,7 @@ describe('Frontend-Backend Integration Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    wsService = new WebSocketService('ws://localhost:3001/ws');
+    wsService = webSocketService;
   });
 
   describe('API Integration', () => {
@@ -90,9 +90,9 @@ describe('Frontend-Backend Integration Tests', () => {
         },
       ];
 
-      apiService.getRoutes.mockResolvedValue({ data: mockRoutes });
+      apiService.getHTTPRoutes.mockResolvedValue({ data: mockRoutes });
 
-      const result = await apiService.getRoutes();
+      const result = await apiService.getHTTPRoutes();
       expect(result.data).toEqual(mockRoutes);
     });
 

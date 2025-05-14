@@ -15,7 +15,7 @@ import {
   Dashboard as DashboardIcon,
   Router as RouterIcon,
   Route as RouteIcon,
-  ContainerIcon,
+  Storage as ContainerIcon,
   Analytics as AnalyticsIcon,
   BugReport as TestingIcon,
   Settings as SettingsIcon,

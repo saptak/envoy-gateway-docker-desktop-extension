@@ -163,9 +163,12 @@ describe('Middleware', () => {
     });
 
     it('should override res.json to log response', () => {
+      // Create a mock for the original json method
+      const originalJson = jest.fn().mockReturnThis();
+      res.json = originalJson;
+      
       requestLogger(req as Request, res as Response, next);
       
-      const originalJson = res.json;
       const testBody = { test: 'data' };
       
       // Call the overridden json method

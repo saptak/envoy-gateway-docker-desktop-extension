@@ -18,7 +18,7 @@ import {
 import {
   Router as GatewayIcon,
   Route as RouteIcon,
-  Container as ContainerIcon,
+  Storage as ContainerIcon,
   TrendingUp as TrendingUpIcon,
   Speed as SpeedIcon,
   Security as SecurityIcon,

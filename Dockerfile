@@ -62,37 +62,7 @@ ENV PORT=3001
 ENV FRONTEND_PORT=3000
 
 # Create startup script
-RUN cat > start.sh << 'EOF'
-#!/bin/sh
-set -e
-
-echo "Starting Envoy Gateway Docker Desktop Extension..."
-
-# Start backend
-cd /app/backend
-node index.js &
-BACKEND_PID=$!
-
-# Serve frontend static files
-cd /app/frontend
-npx serve -s dist -l ${FRONTEND_PORT} &
-FRONTEND_PID=$!
-
-# Function to handle shutdown
-shutdown() {
-  echo "Shutting down services..."
-  kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  wait $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-  exit 0
-}
-
-# Handle signals
-trap 'shutdown' SIGTERM SIGINT
-
-# Wait for processes
-wait $BACKEND_PID $FRONTEND_PID
-EOF
-
+COPY start.sh ./start.sh
 RUN chmod +x start.sh
 
 # Install serve for frontend

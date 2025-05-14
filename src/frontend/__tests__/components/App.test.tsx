@@ -5,17 +5,17 @@ import { BrowserRouter } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { configureStore } from '@reduxjs/toolkit';
 
-import App from '../../App';
-import uiReducer from '../../store/slices/uiSlice';
-import systemReducer from '../../store/slices/systemSlice';
-import gatewayReducer from '../../store/slices/gatewaySlice';
-import routeReducer from '../../store/slices/routeSlice';
-import containerReducer from '../../store/slices/containerSlice';
-import monitoringReducer from '../../store/slices/monitoringSlice';
-import testingReducer from '../../store/slices/testingSlice';
+import App from '../../src/App';
+import uiReducer from '../../src/store/slices/uiSlice';
+import systemReducer from '../../src/store/slices/systemSlice';
+import gatewayReducer from '../../src/store/slices/gatewaySlice';
+import routeReducer from '../../src/store/slices/routeSlice';
+import containerReducer from '../../src/store/slices/containerSlice';
+import monitoringReducer from '../../src/store/slices/monitoringSlice';
+import testingReducer from '../../src/store/slices/testingSlice';
 
 // Mock the WebSocket service
-jest.mock('../../services/websocket', () => ({
+jest.mock('../../src/services/websocket', () => ({
   __esModule: true,
   default: {
     connect: jest.fn().mockResolvedValue(undefined),
@@ -38,7 +38,7 @@ jest.mock('../../services/websocket', () => ({
 }));
 
 // Mock the API service
-jest.mock('../../services/api', () => ({
+jest.mock('../../src/services/api', () => ({
   apiService: {
     getSystemStatus: jest.fn().mockResolvedValue({
       docker: { connected: true, containers: { running: 2, stopped: 0, total: 2 } },

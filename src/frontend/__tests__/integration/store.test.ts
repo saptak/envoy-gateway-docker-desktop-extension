@@ -1,14 +1,14 @@
 import { configureStore } from '@reduxjs/toolkit';
-import uiReducer from '../../store/slices/uiSlice';
-import systemReducer from '../../store/slices/systemSlice';
-import gatewayReducer from '../../store/slices/gatewaySlice';
-import routeReducer from '../../store/slices/routeSlice';
-import containerReducer from '../../store/slices/containerSlice';
-import monitoringReducer from '../../store/slices/monitoringSlice';
-import testingReducer from '../../store/slices/testingSlice';
+import uiReducer from '../../src/store/slices/uiSlice';
+import systemReducer from '../../src/store/slices/systemSlice';
+import gatewayReducer from '../../src/store/slices/gatewaySlice';
+import routeReducer from '../../src/store/slices/routeSlice';
+import containerReducer from '../../src/store/slices/containerSlice';
+import monitoringReducer from '../../src/store/slices/monitoringSlice';
+import testingReducer from '../../src/store/slices/testingSlice';
 
 // Mock API service
-jest.mock('../../services/api', () => ({
+jest.mock('../../src/services/api', () => ({
   apiService: {
     getSystemStatus: jest.fn(),
     getGateways: jest.fn(),
@@ -48,7 +48,7 @@ describe('Redux Store Integration', () => {
 
   describe('UI Slice', () => {
     test('should handle theme changes', () => {
-      const { setTheme } = require('../../store/slices/uiSlice');
+      const { setTheme } = require('../../src/store/slices/uiSlice');
       
       store.dispatch(setTheme('dark'));
       expect(store.getState().ui.theme).toBe('dark');
@@ -58,7 +58,7 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle sidebar toggle', () => {
-      const { toggleSidebar } = require('../../store/slices/uiSlice');
+      const { toggleSidebar } = require('../../src/store/slices/uiSlice');
       
       const initialState = store.getState().ui.sidebarCollapsed;
       store.dispatch(toggleSidebar());
@@ -66,7 +66,7 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle notifications', () => {
-      const { addNotification, removeNotification } = require('../../store/slices/uiSlice');
+      const { addNotification, removeNotification } = require('../../src/store/slices/uiSlice');
       
       const notification = {
         type: 'success',
@@ -87,8 +87,8 @@ describe('Redux Store Integration', () => {
 
   describe('System Slice', () => {
     test('should handle system status updates', async () => {
-      const { fetchSystemStatus } = require('../../store/slices/systemSlice');
-      const { apiService } = require('../../services/api');
+      const { fetchSystemStatus } = require('../../src/store/slices/systemSlice');
+      const { apiService } = require('../../src/services/api');
       
       const mockStatus = {
         docker: { connected: true },
@@ -108,8 +108,8 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle system status errors', async () => {
-      const { fetchSystemStatus } = require('../../store/slices/systemSlice');
-      const { apiService } = require('../../services/api');
+      const { fetchSystemStatus } = require('../../src/store/slices/systemSlice');
+      const { apiService } = require('../../src/services/api');
       
       apiService.getSystemStatus.mockRejectedValue(new Error('Connection failed'));
       
@@ -125,8 +125,8 @@ describe('Redux Store Integration', () => {
 
   describe('Gateway Slice', () => {
     test('should handle gateway fetching', async () => {
-      const { fetchGateways } = require('../../store/slices/gatewaySlice');
-      const { apiService } = require('../../services/api');
+      const { fetchGateways } = require('../../src/store/slices/gatewaySlice');
+      const { apiService } = require('../../src/services/api');
       
       const mockGateways = [
         { id: 'gw1', name: 'gateway1', namespace: 'default' },
@@ -144,8 +144,8 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle gateway creation', async () => {
-      const { createGateway } = require('../../store/slices/gatewaySlice');
-      const { apiService } = require('../../services/api');
+      const { createGateway } = require('../../src/store/slices/gatewaySlice');
+      const { apiService } = require('../../src/services/api');
       
       const newGateway = { name: 'new-gateway', namespace: 'default' };
       const createdGateway = { id: 'gw3', ...newGateway };
@@ -160,7 +160,7 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle gateway filtering', () => {
-      const { setFilters } = require('../../store/slices/gatewaySlice');
+      const { setFilters } = require('../../src/store/slices/gatewaySlice');
       
       store.dispatch(setFilters({ namespace: 'production', search: 'test' }));
       
@@ -172,8 +172,8 @@ describe('Redux Store Integration', () => {
 
   describe('Container Slice', () => {
     test('should handle container operations', async () => {
-      const { fetchContainers, startContainer } = require('../../store/slices/containerSlice');
-      const { apiService } = require('../../services/api');
+      const { fetchContainers, startContainer } = require('../../src/store/slices/containerSlice');
+      const { apiService } = require('../../src/services/api');
       
       const mockContainers = [
         { id: 'c1', name: 'container1', state: 'stopped' },
@@ -193,8 +193,8 @@ describe('Redux Store Integration', () => {
 
   describe('Monitoring Slice', () => {
     test('should handle metrics updates', async () => {
-      const { fetchMetrics, updateMetrics } = require('../../store/slices/monitoringSlice');
-      const { apiService } = require('../../services/api');
+      const { fetchMetrics, updateMetrics } = require('../../src/store/slices/monitoringSlice');
+      const { apiService } = require('../../src/services/api');
       
       const mockMetrics = {
         timestamp: Date.now(),
@@ -216,7 +216,7 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle log entries', () => {
-      const { addLogEntry } = require('../../store/slices/monitoringSlice');
+      const { addLogEntry } = require('../../src/store/slices/monitoringSlice');
       
       const logEntry = {
         id: 'log1',
@@ -235,9 +235,9 @@ describe('Redux Store Integration', () => {
 
   describe('Cross-Slice Interactions', () => {
     test('should handle connected state across slices', async () => {
-      const { fetchSystemStatus } = require('../../store/slices/systemSlice');
-      const { setConnected } = require('../../store/slices/systemSlice');
-      const { apiService } = require('../../services/api');
+      const { fetchSystemStatus } = require('../../src/store/slices/systemSlice');
+      const { setConnected } = require('../../src/store/slices/systemSlice');
+      const { apiService } = require('../../src/services/api');
       
       // Test system status affects UI state
       apiService.getSystemStatus.mockResolvedValue({
@@ -255,9 +255,9 @@ describe('Redux Store Integration', () => {
     });
 
     test('should handle error states across slices', async () => {
-      const { fetchGateways } = require('../../store/slices/gatewaySlice');
-      const { fetchSystemStatus } = require('../../store/slices/systemSlice');
-      const { apiService } = require('../../services/api');
+      const { fetchGateways } = require('../../src/store/slices/gatewaySlice');
+      const { fetchSystemStatus } = require('../../src/store/slices/systemSlice');
+      const { apiService } = require('../../src/services/api');
       
       // Test error propagation
       apiService.getGateways.mockRejectedValue(new Error('Gateway error'));
