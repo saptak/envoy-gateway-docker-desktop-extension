@@ -1,0 +1,17 @@
+{
+  "icon": "icon.svg",
+  "vm": {
+    "composefile": "docker-compose.yaml",
+    "image": "envoy-gateway-extension:latest"
+  },
+  "ui": {
+    "dashboard-tab": {
+      "title": "Envoy Gateway",
+      "src": "index.html",
+      "root": "ui"
+    }
+  },
+  "host": {
+    "binaries": []
+  }
+}

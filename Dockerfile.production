@@ -1,0 +1,71 @@
+# Multi-stage Dockerfile for Envoy Gateway Docker Desktop Extension
+
+# Backend build stage
+FROM node:18-alpine AS backend-builder
+WORKDIR /backend
+COPY src/backend/package*.json ./
+RUN npm ci
+COPY src/backend/ ./
+RUN npm run build
+
+# Frontend build stage
+FROM node:18-alpine AS frontend-builder
+WORKDIR /frontend
+COPY src/frontend/package*.json ./
+RUN npm ci
+COPY src/frontend/ ./
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine
+
+# Add required labels for Docker Desktop extension
+LABEL com.docker.desktop.extension.api.version="0.3.4"
+LABEL org.opencontainers.image.title="Envoy Gateway"
+LABEL org.opencontainers.image.description="Manage Envoy Gateway resources with a modern, intuitive interface"
+LABEL org.opencontainers.image.vendor="Envoy Gateway Community"
+LABEL com.docker.desktop.extension.icon="https://raw.githubusercontent.com/envoyproxy/artwork/main/PNG/Envoy_Logo_Final_PANTONE.png"
+LABEL com.docker.extension.detailed-description="A comprehensive Docker Desktop extension for managing Envoy Gateway configurations, routes, and monitoring performance in real-time."
+LABEL com.docker.extension.publisher-url="https://gateway.envoyproxy.io"
+LABEL com.docker.extension.categories="kubernetes,networking,gateway"
+
+# Install system dependencies
+RUN apk add --no-cache curl tini
+
+# Set up app directory
+WORKDIR /app
+
+# Copy backend build and install production dependencies
+COPY --from=backend-builder /backend/dist ./backend
+COPY --from=backend-builder /backend/package.json ./backend/
+COPY --from=backend-builder /backend/package-lock.json ./backend/
+WORKDIR /app/backend
+RUN npm ci --only=production && npm cache clean --force
+
+# Copy frontend build
+WORKDIR /app
+COPY --from=frontend-builder /frontend/dist ./ui
+
+# Copy extension metadata and assets
+COPY docker-extension.json /metadata.json
+COPY icon.svg /icon.svg
+
+# Create startup script
+RUN echo '#!/bin/sh' > /app/start.sh && \
+    echo 'echo "Starting Envoy Gateway Extension..."' >> /app/start.sh && \
+    echo 'cd /app/backend' >> /app/start.sh && \
+    echo 'exec node index.js' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
+# Expose backend port
+EXPOSE 3001
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3001/api/health || exit 1
+
+# Use tini as init system for proper signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start the backend service
+CMD ["/app/start.sh"]

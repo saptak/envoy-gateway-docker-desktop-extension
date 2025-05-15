@@ -111,20 +111,6 @@ Based on research, the market shows:
 - Integration with Envoy admin interface
 - Debug mode with enhanced logging
 
-#### 3.2.3 Multi-Environment Support
-**Priority: P2 (Nice to Have)**
-- Support for multiple Envoy Gateway instances
-- Environment-specific configurations
-- Easy switching between configurations
-- Environment synchronization helpers
-
-#### 3.2.4 AI-Powered Configuration Assistant
-**Priority: P2 (Nice to Have)**
-- Natural language to Gateway API configuration
-- Configuration optimization suggestions
-- Security best practice recommendations
-- Troubleshooting assistant
-
 ### 3.3 Technical Requirements
 
 #### 3.3.1 Architecture
@@ -211,31 +197,31 @@ Main Extension Panel
 
 ### 5.1 Development Phases
 
-#### Phase 1: Core Infrastructure (4-6 weeks)
+#### Phase 1: Core Infrastructure
 - Extension framework setup
 - Basic Docker integration
 - Envoy Gateway deployment automation
 - Simple configuration management
 
-#### Phase 2: Configuration Management (6-8 weeks)
+#### Phase 2: Configuration Management
 - Visual configuration editors
 - Gateway API resource management
 - Real-time validation
 - Import/export functionality
 
-#### Phase 3: Testing & Monitoring (4-6 weeks)
+#### Phase 3: Testing & Monitoring
 - Integrated HTTP client
 - Basic monitoring dashboard
 - Request/response handling
 - Performance metrics
 
-#### Phase 4: Advanced Features (6-8 weeks)
+#### Phase 4: Advanced Features
 - Policy attachment management
 - Advanced observability features
 - Multi-environment support
 - Performance optimizations
 
-#### Phase 5: Polish & Release (2-4 weeks)
+#### Phase 5: Polish & Release
 - UI/UX refinements
 - Documentation creation
 - Testing and bug fixes
@@ -254,12 +240,6 @@ Main Extension Panel
 - Comprehensive monitoring
 - Policy management
 - Export functionality
-
-#### V1.1+ Future Enhancements
-- AI-powered assistance
-- Advanced debugging tools
-- Integration with external systems
-- Enhanced performance optimization
 
 ---
 
@@ -346,5 +326,5 @@ Main Extension Panel
 **Document Version**: 1.0
 **Last Updated**: [Current Date]
 **Next Review**: [Date + 1 month]
-**Document Owner**: Saptak Sen(@saptak)
+**Document Owner**: Saptak Sen(@saptak@gmail.com)
 **Stakeholders**: Envoy Gateway Team, Docker Desktop Team, Developer Community

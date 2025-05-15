@@ -1,0 +1,10 @@
+services:
+  envoy-gateway-service:
+    image: saptak/envoy-gateway-extension:latest
+    ports:
+      - "8080:8080"
+    networks:
+      - default
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
