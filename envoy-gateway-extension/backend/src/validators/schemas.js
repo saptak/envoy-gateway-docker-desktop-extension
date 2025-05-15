@@ -1,154 +1,147 @@
 const Joi = require('joi');
 
-// Gateway validation schema
-const gatewaySchema = Joi.object({
-  name: Joi.string().required().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).max(63),
-  namespace: Joi.string().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).max(63).default('default'),
-  gatewayClassName: Joi.string().default('envoy-gateway'),
-  listeners: Joi.array().items(
-    Joi.object({
-      name: Joi.string().required(),
-      protocol: Joi.string().valid('HTTP', 'HTTPS', 'TLS', 'TCP', 'UDP').required(),
-      port: Joi.number().integer().min(1).max(65535).required(),
-      hostname: Joi.string().optional(),
-      tls: Joi.object({
-        mode: Joi.string().valid('Terminate', 'Passthrough').default('Terminate'),
-        certificateRefs: Joi.array().items(
-          Joi.object({
-            kind: Joi.string().default('Secret'),
-            name: Joi.string().required(),
-            namespace: Joi.string().optional()
-          })
-        ).optional()
-      }).optional()
-    })
-  ).min(1).required()
+// Gateway Schemas
+const listenerSchema = Joi.object({
+  name: Joi.string().required(),
+  hostname: Joi.string().optional(),
+  protocol: Joi.string().valid('HTTP', 'HTTPS', 'TLS', 'GRPC').required(),
+  port: Joi.number().integer().min(1).max(65535).required(),
+  allowedRoutes: Joi.object().optional(),
+  tls: Joi.object({
+    mode: Joi.string().valid('Terminate', 'Passthrough').optional(),
+    certificateRefs: Joi.array().items(
+      Joi.object({
+        name: Joi.string().required(),
+        namespace: Joi.string().optional()
+      })
+    ).optional()
+  }).optional()
 });
 
-// HTTPRoute validation schema
+const gatewaySchema = Joi.object({
+  name: Joi.string().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).required(),
+  namespace: Joi.string().optional(),
+  gatewayClassName: Joi.string().default('envoy-gateway'),
+  listeners: Joi.array().items(listenerSchema).min(1).required(),
+  labels: Joi.object().pattern(Joi.string(), Joi.string()).optional()
+});
+
+// HTTPRoute Schemas
+const routeMatchSchema = Joi.object({
+  path: Joi.object({
+    type: Joi.string().valid('Exact', 'PathPrefix', 'RegularExpression').default('PathPrefix'),
+    value: Joi.string().required()
+  }).optional(),
+  headers: Joi.array().items(
+    Joi.object({
+      name: Joi.string().required(),
+      type: Joi.string().valid('Exact', 'RegularExpression').optional(),
+      value: Joi.string().required()
+    })
+  ).optional(),
+  queryParams: Joi.array().items(
+    Joi.object({
+      name: Joi.string().required(),
+      type: Joi.string().valid('Exact', 'RegularExpression').optional(),
+      value: Joi.string().required()
+    })
+  ).optional()
+});
+
+const backendRefSchema = Joi.object({
+  name: Joi.string().required(),
+  namespace: Joi.string().optional(),
+  port: Joi.number().integer().min(1).max(65535).required(),
+  weight: Joi.number().integer().min(1).max(1000000).default(1),
+  kind: Joi.string().default('Service')
+});
+
+const routeFilterSchema = Joi.object({
+  type: Joi.string().valid(
+    'RequestHeaderModifier',
+    'ResponseHeaderModifier',
+    'RequestRedirect',
+    'URLRewrite'
+  ).required(),
+  requestHeaderModifier: Joi.object({
+    set: Joi.array().items(
+      Joi.object({
+        name: Joi.string().required(),
+        value: Joi.string().required()
+      })
+    ).optional(),
+    add: Joi.array().items(
+      Joi.object({
+        name: Joi.string().required(),
+        value: Joi.string().required()
+      })
+    ).optional(),
+    remove: Joi.array().items(Joi.string()).optional()
+  }).when('type', { is: 'RequestHeaderModifier', then: Joi.required() }),
+  requestRedirect: Joi.object({
+    scheme: Joi.string().valid('http', 'https').optional(),
+    hostname: Joi.string().optional(),
+    path: Joi.object({
+      type: Joi.string().valid('ReplaceFullPath', 'ReplacePrefixMatch').required(),
+      replaceFullPath: Joi.string().when('type', { is: 'ReplaceFullPath', then: Joi.required() }),
+      replacePrefixMatch: Joi.string().when('type', { is: 'ReplacePrefixMatch', then: Joi.required() })
+    }).optional(),
+    port: Joi.number().integer().min(1).max(65535).optional(),
+    statusCode: Joi.number().integer().valid(301, 302).default(302)
+  }).when('type', { is: 'RequestRedirect', then: Joi.required() })
+});
+
+const routeRuleSchema = Joi.object({
+  matches: Joi.array().items(routeMatchSchema).min(1).required(),
+  backendRefs: Joi.array().items(backendRefSchema).optional(),
+  filters: Joi.array().items(routeFilterSchema).optional()
+});
+
 const httpRouteSchema = Joi.object({
-  name: Joi.string().required().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).max(63),
-  namespace: Joi.string().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).max(63).default('default'),
+  name: Joi.string().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).required(),
+  namespace: Joi.string().optional(),
   parentRefs: Joi.array().items(
     Joi.object({
-      group: Joi.string().default('gateway.networking.k8s.io'),
-      kind: Joi.string().default('Gateway'),
       name: Joi.string().required(),
       namespace: Joi.string().optional(),
+      kind: Joi.string().default('Gateway'),
+      group: Joi.string().default('gateway.networking.k8s.io'),
       sectionName: Joi.string().optional()
     })
   ).min(1).required(),
   hostnames: Joi.array().items(Joi.string().hostname()).optional(),
-  rules: Joi.array().items(
-    Joi.object({
-      matches: Joi.array().items(
-        Joi.object({
-          path: Joi.object({
-            type: Joi.string().valid('Exact', 'PathPrefix', 'RegularExpression').default('PathPrefix'),
-            value: Joi.string().required()
-          }).optional(),
-          headers: Joi.array().items(
-            Joi.object({
-              type: Joi.string().valid('Exact', 'RegularExpression').default('Exact'),
-              name: Joi.string().required(),
-              value: Joi.string().required()
-            })
-          ).optional(),
-          queryParams: Joi.array().items(
-            Joi.object({
-              type: Joi.string().valid('Exact', 'RegularExpression').default('Exact'),
-              name: Joi.string().required(),
-              value: Joi.string().required()
-            })
-          ).optional(),
-          method: Joi.string().valid('GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS').optional()
-        })
-      ).optional(),
-      filters: Joi.array().items(
-        Joi.object({
-          type: Joi.string().valid('RequestHeaderModifier', 'ResponseHeaderModifier', 'RequestRedirect', 'URLRewrite').required(),
-          requestHeaderModifier: Joi.object({
-            set: Joi.array().items(
-              Joi.object({
-                name: Joi.string().required(),
-                value: Joi.string().required()
-              })
-            ).optional(),
-            add: Joi.array().items(
-              Joi.object({
-                name: Joi.string().required(),
-                value: Joi.string().required()
-              })
-            ).optional(),
-            remove: Joi.array().items(Joi.string()).optional()
-          }).optional(),
-          responseHeaderModifier: Joi.object({
-            set: Joi.array().items(
-              Joi.object({
-                name: Joi.string().required(),
-                value: Joi.string().required()
-              })
-            ).optional(),
-            add: Joi.array().items(
-              Joi.object({
-                name: Joi.string().required(),
-                value: Joi.string().required()
-              })
-            ).optional(),
-            remove: Joi.array().items(Joi.string()).optional()
-          }).optional(),
-          requestRedirect: Joi.object({
-            scheme: Joi.string().valid('http', 'https').optional(),
-            hostname: Joi.string().hostname().optional(),
-            path: Joi.object({
-              type: Joi.string().valid('ReplaceFullPath', 'ReplacePrefixMatch').required(),
-              replaceFullPath: Joi.string().optional(),
-              replacePrefixMatch: Joi.string().optional()
-            }).optional(),
-            port: Joi.number().integer().min(1).max(65535).optional(),
-            statusCode: Joi.number().valid(301, 302).default(302)
-          }).optional(),
-          urlRewrite: Joi.object({
-            hostname: Joi.string().hostname().optional(),
-            path: Joi.object({
-              type: Joi.string().valid('ReplaceFullPath', 'ReplacePrefixMatch').required(),
-              replaceFullPath: Joi.string().optional(),
-              replacePrefixMatch: Joi.string().optional()
-            }).optional()
-          }).optional()
-        })
-      ).optional(),
-      backendRefs: Joi.array().items(
-        Joi.object({
-          group: Joi.string().default(''),
-          kind: Joi.string().default('Service'),
-          name: Joi.string().required(),
-          namespace: Joi.string().optional(),
-          port: Joi.number().integer().min(1).max(65535).required(),
-          weight: Joi.number().integer().min(0).max(1000000).default(1)
-        })
-      ).min(1).required()
-    })
-  ).min(1).required()
+  rules: Joi.array().items(routeRuleSchema).min(1).required(),
+  labels: Joi.object().pattern(Joi.string(), Joi.string()).optional()
 });
 
-// Gateway update schema (allows partial updates)
-const gatewayUpdateSchema = gatewaySchema.fork(['name'], (schema) => schema.optional());
-
-// HTTPRoute update schema (allows partial updates)
-const httpRouteUpdateSchema = httpRouteSchema.fork(['name'], (schema) => schema.optional());
-
-// Query parameters schema
-const listQuerySchema = Joi.object({
-  namespace: Joi.string().pattern(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/).max(63).optional(),
-  labelSelector: Joi.string().optional(),
-  fieldSelector: Joi.string().optional()
-});
+// Validation middleware
+const validate = (schema) => {
+  return (req, res, next) => {
+    const { error, value } = schema.validate(req.body, { 
+      abortEarly: false,
+      stripUnknown: true 
+    });
+    
+    if (error) {
+      const errors = error.details.map(detail => ({
+        field: detail.path.join('.'),
+        message: detail.message
+      }));
+      
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: errors
+      });
+    }
+    
+    req.validatedBody = value;
+    next();
+  };
+};
 
 module.exports = {
   gatewaySchema,
   httpRouteSchema,
-  gatewayUpdateSchema,
-  httpRouteUpdateSchema,
-  listQuerySchema
+  listenerSchema,
+  validate
 };

@@ -80,6 +80,14 @@
             margin-left: 0.5rem;
         }
 
+        .status-indicator.warning {
+            background-color: #ff9800;
+        }
+
+        .status-indicator.error {
+            background-color: #f44336;
+        }
+
         .main-content {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -133,6 +141,7 @@
             margin-top: 1.5rem;
             display: flex;
             gap: 1rem;
+            flex-wrap: wrap;
         }
 
         .btn {
@@ -165,6 +174,24 @@
             background: #d1d9e0;
         }
 
+        .btn-success {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #45a049;
+        }
+
+        .btn-warning {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #f57c00;
+        }
+
         .logs-container {
             background: #1a1a1a;
             color: #e0e0e0;
@@ -192,6 +219,10 @@
 
         .log-entry.warning {
             border-color: #ff9800;
+        }
+
+        .log-entry.error {
+            border-color: #f44336;
         }
 
         .log-timestamp {
@@ -251,6 +282,149 @@
         .connection-status.disconnected {
             background: #f44336;
         }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .close {
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            color: #999;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            background-color: white;
+        }
+
+        .form-textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .resource-list {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .resource-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: #fafafa;
+        }
+
+        .resource-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .resource-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .resource-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 15px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-ready {
+            background: #e8f5e9;
+            color: #2e7d2e;
+        }
+
+        .status-pending {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .status-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .resource-actions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
@@ -272,12 +446,18 @@
                 </div>
             </div>
             <div class="status-item">
+                <div class="status-label">Kubernetes</div>
+                <div class="status-value" id="kubernetesStatus">
+                    Checking... <span class="status-indicator warning"></span>
+                </div>
+            </div>
+            <div class="status-item">
                 <div class="status-label">Gateways</div>
-                <div class="status-value" id="gatewayCount">1</div>
+                <div class="status-value" id="gatewayCount">0</div>
             </div>
             <div class="status-item">
                 <div class="status-label">Routes</div>
-                <div class="status-value" id="routeCount">1</div>
+                <div class="status-value" id="routeCount">0</div>
             </div>
             <div class="status-item">
                 <div class="status-label">Last Updated</div>
@@ -294,12 +474,12 @@
                         <span>Create and manage Gateway resources</span>
                     </li>
                     <li>
-                        <div class="feature-icon">R</div>
-                        <span>Configure HTTP/HTTPS routes</span>
+                        <div class="feature-icon">L</div>
+                        <span>Configure listeners and ports</span>
                     </li>
                     <li>
-                        <div class="feature-icon">P</div>
-                        <span>Attach traffic policies</span>
+                        <div class="feature-icon">T</div>
+                        <span>TLS/SSL certificate management</span>
                     </li>
                     <li>
                         <div class="feature-icon">M</div>
@@ -311,39 +491,45 @@
                     <button class="btn btn-primary" onclick="deployEnvoyGateway()">
                         Deploy Envoy Gateway
                     </button>
-                    <button class="btn btn-secondary" onclick="openGatewayManager()">
-                        Manage Gateways
+                    <button class="btn btn-success" onclick="openCreateGatewayModal()">
+                        Create Gateway
+                    </button>
+                    <button class="btn btn-secondary" onclick="showGatewayList()">
+                        View Gateways
                     </button>
                 </div>
             </div>
 
             <div class="card">
-                <h2>Route Testing</h2>
+                <h2>Route Management</h2>
                 <ul class="feature-list">
                     <li>
-                        <div class="feature-icon">T</div>
-                        <span>Test HTTP routes</span>
+                        <div class="feature-icon">R</div>
+                        <span>Create HTTP/HTTPS routes</span>
+                    </li>
+                    <li>
+                        <div class="feature-icon">P</div>
+                        <span>Path-based routing rules</span>
                     </li>
                     <li>
                         <div class="feature-icon">H</div>
-                        <span>Custom headers support</span>
+                        <span>Header-based routing</span>
                     </li>
                     <li>
-                        <div class="feature-icon">L</div>
-                        <span>Load testing scenarios</span>
-                    </li>
-                    <li>
-                        <div class="feature-icon">R</div>
-                        <span>Response analysis</span>
+                        <div class="feature-icon">S</div>
+                        <span>Service backend configuration</span>
                     </li>
                 </ul>
                 
                 <div class="action-buttons">
+                    <button class="btn btn-success" onclick="openCreateRouteModal()">
+                        Create Route
+                    </button>
+                    <button class="btn btn-secondary" onclick="showRouteList()">
+                        View Routes
+                    </button>
                     <button class="btn btn-primary" onclick="testRoute()">
                         Test Route
-                    </button>
-                    <button class="btn btn-secondary" onclick="openTestConsole()">
-                        Test Console
                     </button>
                 </div>
             </div>
@@ -384,8 +570,139 @@
                 </div>
                 <div class="log-entry info">
                     <span class="log-timestamp">[INFO]</span>
+                    <span>Phase 1: Kubernetes Integration Active</span>
+                </div>
+                <div class="log-entry info">
+                    <span class="log-timestamp">[INFO]</span>
                     <span>Using HTTP polling for real-time updates</span>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Gateway Modal -->
+    <div id="createGatewayModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Create Gateway</h2>
+                <span class="close" onclick="closeModal('createGatewayModal')">&times;</span>
+            </div>
+            <form id="createGatewayForm">
+                <div class="form-group">
+                    <label class="form-label" for="gatewayName">Gateway Name</label>
+                    <input type="text" id="gatewayName" class="form-input" required pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="example-gateway">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="gatewayNamespace">Namespace</label>
+                    <input type="text" id="gatewayNamespace" class="form-input" value="default" placeholder="default">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="gatewayClassName">Gateway Class</label>
+                    <input type="text" id="gatewayClassName" class="form-input" value="envoy-gateway" placeholder="envoy-gateway">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Listeners</label>
+                    <div id="listenersContainer">
+                        <div class="listener-item">
+                            <div class="form-group">
+                                <label class="form-label">Listener Name</label>
+                                <input type="text" class="form-input listener-name" value="http" placeholder="http">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Protocol</label>
+                                <select class="form-select listener-protocol">
+                                    <option value="HTTP">HTTP</option>
+                                    <option value="HTTPS">HTTPS</option>
+                                    <option value="TLS">TLS</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Port</label>
+                                <input type="number" class="form-input listener-port" value="80" min="1" max="65535">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-small" onclick="addListener()">Add Listener</button>
+                </div>
+                <div class="action-buttons">
+                    <button type="submit" class="btn btn-primary">Create Gateway</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('createGatewayModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Route Modal -->
+    <div id="createRouteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Create HTTPRoute</h2>
+                <span class="close" onclick="closeModal('createRouteModal')">&times;</span>
+            </div>
+            <form id="createRouteForm">
+                <div class="form-group">
+                    <label class="form-label" for="routeName">Route Name</label>
+                    <input type="text" id="routeName" class="form-input" required pattern="[a-z0-9]([-a-z0-9]*[a-z0-9])?" placeholder="example-route">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="routeNamespace">Namespace</label>
+                    <input type="text" id="routeNamespace" class="form-input" value="default" placeholder="default">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="parentGateway">Parent Gateway</label>
+                    <select id="parentGateway" class="form-select" required>
+                        <option value="">Select a gateway...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="routeHostnames">Hostnames (comma-separated)</label>
+                    <input type="text" id="routeHostnames" class="form-input" placeholder="example.com, api.example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Route Rules</label>
+                    <div id="rulesContainer">
+                        <div class="rule-item">
+                            <div class="form-group">
+                                <label class="form-label">Path Type</label>
+                                <select class="form-select rule-path-type">
+                                    <option value="PathPrefix">Path Prefix</option>
+                                    <option value="Exact">Exact</option>
+                                    <option value="RegularExpression">Regular Expression</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Path Value</label>
+                                <input type="text" class="form-input rule-path-value" value="/" placeholder="/">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Backend Service</label>
+                                <input type="text" class="form-input rule-backend-service" placeholder="example-service">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Backend Port</label>
+                                <input type="number" class="form-input rule-backend-port" value="8080" min="1" max="65535">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-secondary btn-small" onclick="addRule()">Add Rule</button>
+                </div>
+                <div class="action-buttons">
+                    <button type="submit" class="btn btn-primary">Create Route</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('createRouteModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Resource List Modal -->
+    <div id="resourceListModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="resourceListTitle">Resources</h2>
+                <span class="close" onclick="closeModal('resourceListModal')">&times;</span>
+            </div>
+            <div id="resourceListContent" class="resource-list">
+                <!-- Resources will be loaded here -->
             </div>
         </div>
     </div>
@@ -394,10 +711,10 @@
         let pollInterval = null;
         let connectionRetries = 0;
         const maxRetries = 5;
+        let currentNamespace = 'default';
 
         // Get the base URL for API calls
         function getBaseUrl() {
-            // In Docker Desktop extension context, use localhost:8080
             return 'http://localhost:8080';
         }
 
@@ -405,9 +722,11 @@
         function init() {
             addLog('Initializing Envoy Gateway Extension...', 'info');
             addLog('Using base URL: ' + getBaseUrl(), 'info');
+            addLog('Phase 1: Kubernetes Integration Active', 'info');
             fetchInitialData();
             setupPolling();
             updateTimestamp();
+            populateGatewayDropdown();
         }
 
         // Setup polling for real-time updates (no WebSocket)
@@ -419,6 +738,7 @@
                     if (response.ok) {
                         const data = await response.json();
                         updateConnectionStatus(true);
+                        updateKubernetesStatus(data.kubernetes);
                         updateStatus(data);
                         if (data.metrics) {
                             updateMetrics(data.metrics);
@@ -452,7 +772,20 @@
             } else {
                 statusEl.textContent = '● Disconnected';
                 statusEl.className = 'connection-status disconnected';
-                backendStatusEl.innerHTML = 'Disconnected <span class="status-indicator" style="background-color: #f44336;"></span>';
+                backendStatusEl.innerHTML = 'Disconnected <span class="status-indicator error"></span>';
+            }
+        }
+
+        // Update Kubernetes connection status
+        function updateKubernetesStatus(connected) {
+            const kubernetesStatusEl = document.getElementById('kubernetesStatus');
+            
+            if (connected === true) {
+                kubernetesStatusEl.innerHTML = 'Connected <span class="status-indicator"></span>';
+            } else if (connected === false) {
+                kubernetesStatusEl.innerHTML = 'Disconnected <span class="status-indicator error"></span>';
+            } else {
+                kubernetesStatusEl.innerHTML = 'Checking... <span class="status-indicator warning"></span>';
             }
         }
 
@@ -464,8 +797,11 @@
                 // Check health
                 const healthResponse = await fetch(getBaseUrl() + '/api/health');
                 if (healthResponse.ok) {
+                    const health = await healthResponse.json();
                     addLog('Backend health check passed', 'success');
+                    addLog(`Kubernetes connected: ${health.kubernetes}`, 'info');
                     updateConnectionStatus(true);
+                    updateKubernetesStatus(health.kubernetes);
                 } else {
                     addLog('Backend health check failed with status: ' + healthResponse.status, 'warning');
                     updateConnectionStatus(false);
@@ -473,8 +809,20 @@
                 }
                 
                 // Fetch gateways and routes
-                const gatewaysResponse = await fetch(getBaseUrl() + '/api/gateways');
-                const routesResponse = await fetch(getBaseUrl() + '/api/routes');
+                await updateResourceCounts();
+                
+            } catch (error) {
+                addLog('Failed to fetch initial data: ' + error.message, 'warning');
+                addLog('Error details: ' + JSON.stringify(error), 'warning');
+                updateConnectionStatus(false);
+            }
+        }
+
+        // Update gateway and route counts
+        async function updateResourceCounts() {
+            try {
+                const gatewaysResponse = await fetch(getBaseUrl() + '/api/gateways?namespace=' + currentNamespace);
+                const routesResponse = await fetch(getBaseUrl() + '/api/routes?namespace=' + currentNamespace);
                 
                 if (gatewaysResponse.ok && routesResponse.ok) {
                     const gateways = await gatewaysResponse.json();
@@ -483,14 +831,12 @@
                     document.getElementById('gatewayCount').textContent = gateways.total || 0;
                     document.getElementById('routeCount').textContent = routes.total || 0;
                     
-                    addLog(`Loaded ${gateways.total || 0} gateways and ${routes.total || 0} routes`, 'info');
+                    addLog(`Found ${gateways.total || 0} gateways and ${routes.total || 0} routes in ${currentNamespace}`, 'info');
                 } else {
-                    addLog('Failed to fetch gateway/route data', 'warning');
+                    addLog('Failed to fetch gateway/route counts', 'warning');
                 }
             } catch (error) {
-                addLog('Failed to fetch initial data: ' + error.message, 'warning');
-                addLog('Error details: ' + JSON.stringify(error), 'warning');
-                updateConnectionStatus(false);
+                addLog('Error updating resource counts: ' + error.message, 'warning');
             }
         }
 
@@ -546,7 +892,341 @@
             }
         }
 
-        // Action handlers
+        // Gateway Management
+        function openCreateGatewayModal() {
+            document.getElementById('createGatewayModal').style.display = 'block';
+            addLog('Opening Gateway creation form...', 'info');
+        }
+
+        function addListener() {
+            const container = document.getElementById('listenersContainer');
+            const listenerItem = document.createElement('div');
+            listenerItem.className = 'listener-item';
+            listenerItem.innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Listener Name</label>
+                    <input type="text" class="form-input listener-name" placeholder="listener-name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Protocol</label>
+                    <select class="form-select listener-protocol">
+                        <option value="HTTP">HTTP</option>
+                        <option value="HTTPS">HTTPS</option>
+                        <option value="TLS">TLS</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Port</label>
+                    <input type="number" class="form-input listener-port" value="80" min="1" max="65535">
+                </div>
+                <button type="button" class="btn btn-warning btn-small" onclick="removeListener(this)">Remove</button>
+            `;
+            container.appendChild(listenerItem);
+        }
+
+        function removeListener(button) {
+            button.parentElement.remove();
+        }
+
+        async function createGateway(event) {
+            event.preventDefault();
+            
+            const formData = new FormData(event.target);
+            const listeners = [];
+            
+            // Collect listeners
+            const listenerItems = document.querySelectorAll('.listener-item');
+            listenerItems.forEach(item => {
+                const name = item.querySelector('.listener-name').value;
+                const protocol = item.querySelector('.listener-protocol').value;
+                const port = parseInt(item.querySelector('.listener-port').value);
+                
+                if (name && protocol && port) {
+                    listeners.push({ name, protocol, port });
+                }
+            });
+            
+            const gateway = {
+                name: document.getElementById('gatewayName').value,
+                namespace: document.getElementById('gatewayNamespace').value || 'default',
+                gatewayClassName: document.getElementById('gatewayClassName').value || 'envoy-gateway',
+                listeners: listeners
+            };
+            
+            try {
+                addLog(`Creating gateway: ${gateway.name}...`, 'info');
+                
+                const response = await fetch(getBaseUrl() + `/api/gateways?namespace=${gateway.namespace}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(gateway)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    addLog(`Gateway ${gateway.name} created successfully`, 'success');
+                    closeModal('createGatewayModal');
+                    updateResourceCounts();
+                    populateGatewayDropdown();
+                } else {
+                    const error = await response.json();
+                    addLog(`Failed to create gateway: ${error.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error creating gateway: ${error.message}`, 'error');
+            }
+        }
+
+        // Route Management
+        function openCreateRouteModal() {
+            document.getElementById('createRouteModal').style.display = 'block';
+            addLog('Opening Route creation form...', 'info');
+            populateGatewayDropdown();
+        }
+
+        async function populateGatewayDropdown() {
+            try {
+                const response = await fetch(getBaseUrl() + `/api/gateways?namespace=${currentNamespace}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const select = document.getElementById('parentGateway');
+                    
+                    // Clear existing options except the first one
+                    select.innerHTML = '<option value="">Select a gateway...</option>';
+                    
+                    data.gateways.forEach(gateway => {
+                        const option = document.createElement('option');
+                        option.value = gateway.name;
+                        option.textContent = `${gateway.name} (${gateway.namespace})`;
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                addLog(`Error loading gateways: ${error.message}`, 'warning');
+            }
+        }
+
+        function addRule() {
+            const container = document.getElementById('rulesContainer');
+            const ruleItem = document.createElement('div');
+            ruleItem.className = 'rule-item';
+            ruleItem.innerHTML = `
+                <div class="form-group">
+                    <label class="form-label">Path Type</label>
+                    <select class="form-select rule-path-type">
+                        <option value="PathPrefix">Path Prefix</option>
+                        <option value="Exact">Exact</option>
+                        <option value="RegularExpression">Regular Expression</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Path Value</label>
+                    <input type="text" class="form-input rule-path-value" value="/" placeholder="/">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Backend Service</label>
+                    <input type="text" class="form-input rule-backend-service" placeholder="service-name">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Backend Port</label>
+                    <input type="number" class="form-input rule-backend-port" value="8080" min="1" max="65535">
+                </div>
+                <button type="button" class="btn btn-warning btn-small" onclick="removeRule(this)">Remove Rule</button>
+            `;
+            container.appendChild(ruleItem);
+        }
+
+        function removeRule(button) {
+            button.parentElement.remove();
+        }
+
+        async function createRoute(event) {
+            event.preventDefault();
+            
+            const rules = [];
+            
+            // Collect rules
+            const ruleItems = document.querySelectorAll('.rule-item');
+            ruleItems.forEach(item => {
+                const pathType = item.querySelector('.rule-path-type').value;
+                const pathValue = item.querySelector('.rule-path-value').value;
+                const serviceName = item.querySelector('.rule-backend-service').value;
+                const servicePort = parseInt(item.querySelector('.rule-backend-port').value);
+                
+                if (pathValue && serviceName && servicePort) {
+                    rules.push({
+                        matches: [
+                            {
+                                path: {
+                                    type: pathType,
+                                    value: pathValue
+                                }
+                            }
+                        ],
+                        backendRefs: [
+                            {
+                                name: serviceName,
+                                port: servicePort
+                            }
+                        ]
+                    });
+                }
+            });
+            
+            const hostnames = document.getElementById('routeHostnames').value
+                .split(',')
+                .map(h => h.trim())
+                .filter(h => h);
+            
+            const route = {
+                name: document.getElementById('routeName').value,
+                namespace: document.getElementById('routeNamespace').value || 'default',
+                parentRefs: [
+                    {
+                        name: document.getElementById('parentGateway').value,
+                        namespace: document.getElementById('routeNamespace').value || 'default'
+                    }
+                ],
+                hostnames: hostnames.length > 0 ? hostnames : undefined,
+                rules: rules
+            };
+            
+            try {
+                addLog(`Creating route: ${route.name}...`, 'info');
+                
+                const response = await fetch(getBaseUrl() + `/api/routes?namespace=${route.namespace}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(route)
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    addLog(`Route ${route.name} created successfully`, 'success');
+                    closeModal('createRouteModal');
+                    updateResourceCounts();
+                } else {
+                    const error = await response.json();
+                    addLog(`Failed to create route: ${error.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error creating route: ${error.message}`, 'error');
+            }
+        }
+
+        // Resource List Functions
+        async function showGatewayList() {
+            try {
+                const response = await fetch(getBaseUrl() + `/api/gateways?namespace=${currentNamespace}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    displayResourceList('Gateways', data.gateways, 'gateway');
+                } else {
+                    addLog('Failed to fetch gateways', 'error');
+                }
+            } catch (error) {
+                addLog(`Error fetching gateways: ${error.message}`, 'error');
+            }
+        }
+
+        async function showRouteList() {
+            try {
+                const response = await fetch(getBaseUrl() + `/api/routes?namespace=${currentNamespace}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    displayResourceList('Routes', data.routes, 'route');
+                } else {
+                    addLog('Failed to fetch routes', 'error');
+                }
+            } catch (error) {
+                addLog(`Error fetching routes: ${error.message}`, 'error');
+            }
+        }
+
+        function displayResourceList(title, resources, type) {
+            document.getElementById('resourceListTitle').textContent = title;
+            const content = document.getElementById('resourceListContent');
+            content.innerHTML = '';
+            
+            if (resources.length === 0) {
+                content.innerHTML = `<p>No ${type}s found in namespace "${currentNamespace}"</p>`;
+            } else {
+                resources.forEach(resource => {
+                    const item = document.createElement('div');
+                    item.className = 'resource-item';
+                    
+                    const statusClass = getStatusClass(resource.status);
+                    
+                    item.innerHTML = `
+                        <div class="resource-header">
+                            <span class="resource-name">${resource.name}</span>
+                            <span class="resource-status ${statusClass}">${resource.status}</span>
+                        </div>
+                        <div>
+                            <strong>Namespace:</strong> ${resource.namespace}<br>
+                            <strong>Created:</strong> ${new Date(resource.createdAt).toLocaleString()}
+                        </div>
+                        <div class="resource-actions">
+                            <button class="btn btn-secondary btn-small" onclick="viewResource('${type}', '${resource.name}', '${resource.namespace}')">View YAML</button>
+                            <button class="btn btn-warning btn-small" onclick="deleteResource('${type}', '${resource.name}', '${resource.namespace}')">Delete</button>
+                        </div>
+                    `;
+                    content.appendChild(item);
+                });
+            }
+            
+            document.getElementById('resourceListModal').style.display = 'block';
+        }
+
+        function getStatusClass(status) {
+            switch (status) {
+                case 'Ready':
+                case 'Accepted':
+                    return 'status-ready';
+                case 'Pending':
+                    return 'status-pending';
+                default:
+                    return 'status-error';
+            }
+        }
+
+        async function deleteResource(type, name, namespace) {
+            if (!confirm(`Are you sure you want to delete ${type} "${name}"?`)) {
+                return;
+            }
+            
+            try {
+                addLog(`Deleting ${type}: ${name}...`, 'info');
+                
+                const endpoint = type === 'gateway' ? 'gateways' : 'routes';
+                const response = await fetch(getBaseUrl() + `/api/${endpoint}/${name}?namespace=${namespace}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    addLog(`${type} ${name} deleted successfully`, 'success');
+                    closeModal('resourceListModal');
+                    updateResourceCounts();
+                    populateGatewayDropdown();
+                } else {
+                    const error = await response.json();
+                    addLog(`Failed to delete ${type}: ${error.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error deleting ${type}: ${error.message}`, 'error');
+            }
+        }
+
+        function viewResource(type, name, namespace) {
+            addLog(`Viewing ${type} ${name} configuration...`, 'info');
+            alert(`View ${type} functionality will be implemented in Phase 2`);
+        }
+
+        // Deploy Envoy Gateway
         async function deployEnvoyGateway() {
             addLog('Initiating Envoy Gateway deployment...', 'info');
             
@@ -562,16 +1242,26 @@
                     const result = await response.json();
                     addLog('Envoy Gateway deployment successful', 'success');
                     addLog(`Deployment ID: ${result.deploymentId}`, 'info');
+                    
+                    // Refresh status after deployment
+                    setTimeout(() => {
+                        fetchInitialData();
+                    }, 2000);
                 } else {
-                    addLog('Deployment failed with status: ' + response.status, 'warning');
+                    const error = await response.json();
+                    addLog(`Deployment failed: ${error.error}`, 'error');
                 }
             } catch (error) {
-                addLog('Deployment error: ' + error.message, 'warning');
+                addLog('Deployment error: ' + error.message, 'error');
             }
         }
 
+        // Test Route functionality
         async function testRoute() {
             addLog('Testing route...', 'info');
+            
+            const testUrl = prompt('Enter URL to test:', 'http://localhost:8080/test');
+            if (!testUrl) return;
             
             try {
                 const response = await fetch(getBaseUrl() + '/api/test-route', {
@@ -580,7 +1270,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        url: 'http://example.com',
+                        url: testUrl,
                         method: 'GET',
                         headers: {},
                         body: null
@@ -594,24 +1284,28 @@
                     // Update metrics with test result
                     document.getElementById('responseTime').textContent = `${result.responseTime}ms`;
                 } else {
-                    addLog('Route test failed with status: ' + response.status, 'warning');
+                    addLog('Route test failed', 'error');
                 }
             } catch (error) {
-                addLog('Test error: ' + error.message, 'warning');
+                addLog('Test error: ' + error.message, 'error');
             }
         }
 
-        function openGatewayManager() {
-            addLog('Opening Gateway Manager...', 'info');
-            // This would open a detailed gateway management interface
-            alert('Gateway Manager would open here (feature in development)');
+        // Modal management
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
         }
 
-        function openTestConsole() {
-            addLog('Opening Test Console...', 'info');
-            // This would open a testing interface
-            alert('Test Console would open here (feature in development)');
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
         }
+
+        // Form event listeners
+        document.getElementById('createGatewayForm').addEventListener('submit', createGateway);
+        document.getElementById('createRouteForm').addEventListener('submit', createRoute);
 
         // Initialize when page loads
         window.addEventListener('load', init);

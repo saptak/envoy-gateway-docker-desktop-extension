@@ -1,58 +1,49 @@
 const k8s = require('@kubernetes/client-node');
 const yaml = require('js-yaml');
+const _ = require('lodash');
 
 class KubernetesService {
   constructor() {
     this.kc = new k8s.KubeConfig();
-    this.k8sApi = null;
+    this.k8sClient = null;
     this.customObjectsApi = null;
-    this.isConnected = false;
+    this.connected = false;
     
-    this.init();
+    this.initializeConnection();
   }
 
-  async init() {
+  async initializeConnection() {
     try {
-      // Load kubeconfig from default location or in-cluster config
-      if (process.env.KUBECONFIG) {
-        this.kc.loadFromFile(process.env.KUBECONFIG);
-      } else if (process.env.KUBERNETES_SERVICE_HOST) {
-        this.kc.loadFromCluster();
-      } else {
-        this.kc.loadFromDefault();
-      }
-
-      this.k8sApi = this.kc.makeApiClient(k8s.CoreV1Api);
+      // Try to load from default kubeconfig
+      this.kc.loadFromDefault();
+      
+      this.k8sClient = this.kc.makeApiClient(k8s.CoreV1Api);
       this.customObjectsApi = this.kc.makeApiClient(k8s.CustomObjectsApi);
       
       // Test connection
-      await this.testConnection();
-      this.isConnected = true;
+      await this.k8sClient.listNamespaces();
+      this.connected = true;
       console.log('Successfully connected to Kubernetes cluster');
     } catch (error) {
       console.error('Failed to connect to Kubernetes:', error.message);
-      this.isConnected = false;
+      this.connected = false;
     }
   }
 
-  async testConnection() {
-    try {
-      await this.k8sApi.listNamespace();
-      return true;
-    } catch (error) {
-      throw new Error(`Kubernetes connection test failed: ${error.message}`);
-    }
+  isConnected() {
+    return this.connected;
   }
 
+  // Gateway Management
   async getGateways(namespace = 'default') {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
 
+    try {
       const response = await this.customObjectsApi.listNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'gateways'
       );
@@ -61,136 +52,119 @@ class KubernetesService {
         id: gateway.metadata.uid,
         name: gateway.metadata.name,
         namespace: gateway.metadata.namespace,
-        status: this.parseGatewayStatus(gateway.status),
+        status: this.getGatewayStatus(gateway),
         listeners: gateway.spec.listeners || [],
-        addresses: gateway.status?.addresses || [],
         createdAt: gateway.metadata.creationTimestamp,
-        spec: gateway.spec,
-        raw: gateway
+        rawConfig: gateway
       }));
     } catch (error) {
-      // Return empty array if Gateways CRD doesn't exist (Envoy Gateway not installed)
-      if (error.statusCode === 404) {
-        return [];
-      }
+      console.error('Error fetching gateways:', error);
       throw error;
     }
   }
 
-  async createGateway(namespace = 'default', gatewaySpec) {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
+  async createGateway(gatewaySpec, namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
+
+    const gateway = {
+      apiVersion: 'gateway.networking.k8s.io/v1beta1',
+      kind: 'Gateway',
+      metadata: {
+        name: gatewaySpec.name,
+        namespace: namespace,
+        labels: gatewaySpec.labels || {}
+      },
+      spec: {
+        gatewayClassName: gatewaySpec.gatewayClassName || 'envoy-gateway',
+        listeners: gatewaySpec.listeners || []
       }
+    };
 
-      const gateway = {
-        apiVersion: 'gateway.networking.k8s.io/v1',
-        kind: 'Gateway',
-        metadata: {
-          name: gatewaySpec.name,
-          namespace: namespace
-        },
-        spec: {
-          gatewayClassName: gatewaySpec.gatewayClassName || 'envoy-gateway',
-          listeners: gatewaySpec.listeners || []
-        }
-      };
-
+    try {
       const response = await this.customObjectsApi.createNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'gateways',
         gateway
       );
-
-      return {
-        id: response.body.metadata.uid,
-        name: response.body.metadata.name,
-        namespace: response.body.metadata.namespace,
-        status: 'Pending',
-        listeners: response.body.spec.listeners || [],
-        createdAt: response.body.metadata.creationTimestamp,
-        spec: response.body.spec
-      };
+      return response.body;
     } catch (error) {
-      throw new Error(`Failed to create gateway: ${error.message}`);
+      console.error('Error creating gateway:', error);
+      throw error;
     }
   }
 
-  async updateGateway(namespace = 'default', name, gatewaySpec) {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
+  async updateGateway(name, gatewaySpec, namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
 
-      // Get existing gateway
-      const existing = await this.customObjectsApi.getNamespacedCustomObject(
+    try {
+      // Get existing gateway to preserve metadata
+      const existingGateway = await this.customObjectsApi.getNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'gateways',
         name
       );
 
-      // Update spec
-      existing.body.spec = {
-        ...existing.body.spec,
-        ...gatewaySpec
+      const updatedGateway = {
+        ...existingGateway.body,
+        spec: {
+          gatewayClassName: gatewaySpec.gatewayClassName || existingGateway.body.spec.gatewayClassName,
+          listeners: gatewaySpec.listeners || existingGateway.body.spec.listeners
+        }
       };
 
       const response = await this.customObjectsApi.replaceNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'gateways',
         name,
-        existing.body
+        updatedGateway
       );
-
-      return {
-        id: response.body.metadata.uid,
-        name: response.body.metadata.name,
-        namespace: response.body.metadata.namespace,
-        status: this.parseGatewayStatus(response.body.status),
-        listeners: response.body.spec.listeners || [],
-        createdAt: response.body.metadata.creationTimestamp,
-        spec: response.body.spec
-      };
+      return response.body;
     } catch (error) {
-      throw new Error(`Failed to update gateway: ${error.message}`);
+      console.error('Error updating gateway:', error);
+      throw error;
     }
   }
 
-  async deleteGateway(namespace = 'default', name) {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
+  async deleteGateway(name, namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
 
+    try {
       await this.customObjectsApi.deleteNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'gateways',
         name
       );
-
-      return { success: true, message: `Gateway ${name} deleted successfully` };
+      return { success: true };
     } catch (error) {
-      throw new Error(`Failed to delete gateway: ${error.message}`);
+      console.error('Error deleting gateway:', error);
+      throw error;
     }
   }
 
+  // HTTPRoute Management
   async getHTTPRoutes(namespace = 'default') {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
 
+    try {
       const response = await this.customObjectsApi.listNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'httproutes'
       );
@@ -202,219 +176,257 @@ class KubernetesService {
         parentRefs: route.spec.parentRefs || [],
         hostnames: route.spec.hostnames || [],
         rules: route.spec.rules || [],
-        status: this.parseRouteStatus(route.status),
+        status: this.getRouteStatus(route),
         createdAt: route.metadata.creationTimestamp,
-        spec: route.spec,
-        raw: route
+        rawConfig: route
       }));
     } catch (error) {
-      // Return empty array if HTTPRoutes CRD doesn't exist
-      if (error.statusCode === 404) {
-        return [];
-      }
+      console.error('Error fetching HTTPRoutes:', error);
       throw error;
     }
   }
 
-  async createHTTPRoute(namespace = 'default', routeSpec) {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
+  async createHTTPRoute(routeSpec, namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
+
+    const httpRoute = {
+      apiVersion: 'gateway.networking.k8s.io/v1beta1',
+      kind: 'HTTPRoute',
+      metadata: {
+        name: routeSpec.name,
+        namespace: namespace,
+        labels: routeSpec.labels || {}
+      },
+      spec: {
+        parentRefs: routeSpec.parentRefs || [],
+        hostnames: routeSpec.hostnames || [],
+        rules: routeSpec.rules || []
       }
+    };
 
-      const httpRoute = {
-        apiVersion: 'gateway.networking.k8s.io/v1',
-        kind: 'HTTPRoute',
-        metadata: {
-          name: routeSpec.name,
-          namespace: namespace
-        },
-        spec: {
-          parentRefs: routeSpec.parentRefs || [],
-          hostnames: routeSpec.hostnames || [],
-          rules: routeSpec.rules || []
-        }
-      };
-
+    try {
       const response = await this.customObjectsApi.createNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
+        'v1beta1',
         namespace,
         'httproutes',
         httpRoute
       );
-
-      return {
-        id: response.body.metadata.uid,
-        name: response.body.metadata.name,
-        namespace: response.body.metadata.namespace,
-        parentRefs: response.body.spec.parentRefs || [],
-        hostnames: response.body.spec.hostnames || [],
-        rules: response.body.spec.rules || [],
-        status: 'Pending',
-        createdAt: response.body.metadata.creationTimestamp,
-        spec: response.body.spec
-      };
+      return response.body;
     } catch (error) {
-      throw new Error(`Failed to create HTTPRoute: ${error.message}`);
-    }
-  }
-
-  async updateHTTPRoute(namespace = 'default', name, routeSpec) {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
-
-      // Get existing route
-      const existing = await this.customObjectsApi.getNamespacedCustomObject(
-        'gateway.networking.k8s.io',
-        'v1',
-        namespace,
-        'httproutes',
-        name
-      );
-
-      // Update spec
-      existing.body.spec = {
-        ...existing.body.spec,
-        ...routeSpec
-      };
-
-      const response = await this.customObjectsApi.replaceNamespacedCustomObject(
-        'gateway.networking.k8s.io',
-        'v1',
-        namespace,
-        'httproutes',
-        name,
-        existing.body
-      );
-
-      return {
-        id: response.body.metadata.uid,
-        name: response.body.metadata.name,
-        namespace: response.body.metadata.namespace,
-        parentRefs: response.body.spec.parentRefs || [],
-        hostnames: response.body.spec.hostnames || [],
-        rules: response.body.spec.rules || [],
-        status: this.parseRouteStatus(response.body.status),
-        createdAt: response.body.metadata.creationTimestamp,
-        spec: response.body.spec
-      };
-    } catch (error) {
-      throw new Error(`Failed to update HTTPRoute: ${error.message}`);
-    }
-  }
-
-  async deleteHTTPRoute(namespace = 'default', name) {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
-
-      await this.customObjectsApi.deleteNamespacedCustomObject(
-        'gateway.networking.k8s.io',
-        'v1',
-        namespace,
-        'httproutes',
-        name
-      );
-
-      return { success: true, message: `HTTPRoute ${name} deleted successfully` };
-    } catch (error) {
-      throw new Error(`Failed to delete HTTPRoute: ${error.message}`);
-    }
-  }
-
-  async getNamespaces() {
-    try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
-
-      const response = await this.k8sApi.listNamespace();
-      return response.body.items.map(ns => ({
-        name: ns.metadata.name,
-        status: ns.status.phase,
-        createdAt: ns.metadata.creationTimestamp
-      }));
-    } catch (error) {
+      console.error('Error creating HTTPRoute:', error);
       throw error;
     }
   }
 
-  async deployEnvoyGateway() {
+  async updateHTTPRoute(name, routeSpec, namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
+
     try {
-      if (!this.isConnected) {
-        throw new Error('Not connected to Kubernetes cluster');
-      }
-
-      // Check if Envoy Gateway is already installed
-      const gatewayClasses = await this.customObjectsApi.listClusterCustomObject(
+      const existingRoute = await this.customObjectsApi.getNamespacedCustomObject(
         'gateway.networking.k8s.io',
-        'v1',
-        'gatewayclasses'
+        'v1beta1',
+        namespace,
+        'httproutes',
+        name
       );
 
-      const envoyGatewayClass = gatewayClasses.body.items.find(
-        gc => gc.metadata.name === 'envoy-gateway'
-      );
+      const updatedRoute = {
+        ...existingRoute.body,
+        spec: {
+          parentRefs: routeSpec.parentRefs || existingRoute.body.spec.parentRefs,
+          hostnames: routeSpec.hostnames || existingRoute.body.spec.hostnames,
+          rules: routeSpec.rules || existingRoute.body.spec.rules
+        }
+      };
 
-      if (envoyGatewayClass) {
+      const response = await this.customObjectsApi.replaceNamespacedCustomObject(
+        'gateway.networking.k8s.io',
+        'v1beta1',
+        namespace,
+        'httproutes',
+        name,
+        updatedRoute
+      );
+      return response.body;
+    } catch (error) {
+      console.error('Error updating HTTPRoute:', error);
+      throw error;
+    }
+  }
+
+  async deleteHTTPRoute(name, namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
+
+    try {
+      await this.customObjectsApi.deleteNamespacedCustomObject(
+        'gateway.networking.k8s.io',
+        'v1beta1',
+        namespace,
+        'httproutes',
+        name
+      );
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting HTTPRoute:', error);
+      throw error;
+    }
+  }
+
+  // Helper methods
+  getGatewayStatus(gateway) {
+    if (!gateway.status || !gateway.status.conditions) {
+      return 'Unknown';
+    }
+
+    const readyCondition = gateway.status.conditions.find(
+      condition => condition.type === 'Ready'
+    );
+
+    if (readyCondition) {
+      return readyCondition.status === 'True' ? 'Ready' : 'Not Ready';
+    }
+
+    const acceptedCondition = gateway.status.conditions.find(
+      condition => condition.type === 'Accepted'
+    );
+
+    if (acceptedCondition) {
+      return acceptedCondition.status === 'True' ? 'Accepted' : 'Not Accepted';
+    }
+
+    return 'Unknown';
+  }
+
+  getRouteStatus(route) {
+    if (!route.status || !route.status.conditions) {
+      return 'Unknown';
+    }
+
+    const acceptedCondition = route.status.conditions.find(
+      condition => condition.type === 'Accepted'
+    );
+
+    if (acceptedCondition) {
+      return acceptedCondition.status === 'True' ? 'Accepted' : 'Not Accepted';
+    }
+
+    return 'Unknown';
+  }
+
+  // Envoy Gateway Management
+  async deployEnvoyGateway(namespace = 'envoy-gateway-system') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
+
+    try {
+      // Check if EnvoyGateway is already installed
+      const existingInstallation = await this.checkEnvoyGatewayInstallation(namespace);
+      
+      if (existingInstallation) {
         return {
-          status: 'already-installed',
+          status: 'already_installed',
           message: 'Envoy Gateway is already installed',
-          gatewayClass: envoyGatewayClass.metadata.name
+          namespace: namespace
         };
       }
 
-      // This is a simplified deployment - in reality, you'd need to apply
-      // the full Envoy Gateway YAML manifests
+      // Create the EnvoyGateway custom resource
+      const envoyGateway = {
+        apiVersion: 'config.gateway.envoyproxy.io/v1alpha1',
+        kind: 'EnvoyGateway',
+        metadata: {
+          name: 'envoy-gateway',
+          namespace: namespace
+        },
+        spec: {
+          gateway: {
+            controllerName: 'gateway.envoyproxy.io/gatewayclass-controller'
+          }
+        }
+      };
+
+      const response = await this.customObjectsApi.createNamespacedCustomObject(
+        'config.gateway.envoyproxy.io',
+        'v1alpha1',
+        namespace,
+        'envoygateways',
+        envoyGateway
+      );
+
       return {
-        status: 'installation-required',
-        message: 'Envoy Gateway installation is required',
-        instructions: 'Please run: kubectl apply -f https://github.com/envoyproxy/gateway/releases/download/v1.0.0/install.yaml'
+        status: 'success',
+        message: 'Envoy Gateway deployment initiated',
+        deploymentId: `deploy-${Date.now()}`,
+        namespace: namespace,
+        gatewayResource: response.body
       };
     } catch (error) {
-      throw new Error(`Failed to check/deploy Envoy Gateway: ${error.message}`);
+      console.error('Error deploying Envoy Gateway:', error);
+      throw error;
     }
   }
 
-  parseGatewayStatus(status) {
-    if (!status) return 'Unknown';
-    
-    if (status.conditions && status.conditions.length > 0) {
-      const programmedCondition = status.conditions.find(c => c.type === 'Programmed');
-      if (programmedCondition) {
-        return programmedCondition.status === 'True' ? 'Ready' : 'Not Ready';
-      }
+  async checkEnvoyGatewayInstallation(namespace = 'envoy-gateway-system') {
+    try {
+      const response = await this.customObjectsApi.listNamespacedCustomObject(
+        'config.gateway.envoyproxy.io',
+        'v1alpha1',
+        namespace,
+        'envoygateways'
+      );
+      return response.body.items.length > 0;
+    } catch (error) {
+      // If the CRD doesn't exist, Envoy Gateway is not installed
+      return false;
     }
-    
-    return 'Pending';
   }
 
-  parseRouteStatus(status) {
-    if (!status) return 'Unknown';
-    
-    if (status.parents && status.parents.length > 0) {
-      const parent = status.parents[0];
-      if (parent.conditions && parent.conditions.length > 0) {
-        const acceptedCondition = parent.conditions.find(c => c.type === 'Accepted');
-        if (acceptedCondition) {
-          return acceptedCondition.status === 'True' ? 'Accepted' : 'Rejected';
-        }
-      }
+  // Namespace management
+  async getNamespaces() {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
     }
-    
-    return 'Pending';
+
+    try {
+      const response = await this.k8sClient.listNamespaces();
+      return response.body.items.map(ns => ({
+        name: ns.metadata.name,
+        createdAt: ns.metadata.creationTimestamp,
+        status: ns.status.phase
+      }));
+    } catch (error) {
+      console.error('Error fetching namespaces:', error);
+      throw error;
+    }
   }
 
-  getConnectionStatus() {
-    return {
-      connected: this.isConnected,
-      cluster: this.kc.getCurrentCluster()?.name || 'unknown',
-      context: this.kc.getCurrentContext() || 'unknown'
-    };
+  // Service discovery
+  async getServices(namespace = 'default') {
+    if (!this.connected) {
+      throw new Error('Not connected to Kubernetes cluster');
+    }
+
+    try {
+      const response = await this.k8sClient.listNamespacedService(namespace);
+      return response.body.items.map(service => ({
+        name: service.metadata.name,
+        namespace: service.metadata.namespace,
+        type: service.spec.type,
+        ports: service.spec.ports || [],
+        clusterIP: service.spec.clusterIP
+      }));
+    } catch (error) {
+      console.error('Error fetching services:', error);
+      throw error;
+    }
   }
 }
 
