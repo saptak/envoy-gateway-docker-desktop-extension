@@ -3,6 +3,8 @@ import { EventEmitter } from 'events';
 import { LoggerService } from '../utils/logger';
 import { Gateway, HTTPRoute, GatewayStatus, RouteStatus, KubernetesError } from '../../shared/types';
 import * as yaml from 'js-yaml';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface KubernetesResource {
   apiVersion: string;
@@ -30,9 +32,13 @@ export class KubernetesService extends EventEmitter {
   private readonly ENVOY_GATEWAY_GROUP = 'gateway.envoyproxy.io';
   private readonly ENVOY_GATEWAY_VERSION = 'v1alpha1';
 
+  private connectionStrategies: Array<() => k8s.KubeConfig> = [];
+  private currentStrategy = 0;
+
   private constructor() {
     super();
     this.logger = LoggerService.getInstance();
+    this.setupConnectionStrategies();
     this.initializeKubernetesClient();
   }
 
@@ -43,39 +49,278 @@ export class KubernetesService extends EventEmitter {
     return KubernetesService.instance;
   }
 
+  private setupConnectionStrategies(): void {
+    this.connectionStrategies = [
+      // Strategy 1: Docker Desktop specific with host.docker.internal
+      () => {
+        const kc = new k8s.KubeConfig();
+        try {
+          kc.loadFromDefault();
+          // Modify the server URL for Docker Desktop compatibility
+          if (kc.getCurrentCluster()?.server?.includes('127.0.0.1')) {
+            const cluster = kc.getCurrentCluster();
+            if (cluster) {
+              cluster.server = cluster.server.replace('127.0.0.1', 'host.docker.internal');
+              this.logger.info(`🔄 Modified cluster server URL to: ${cluster.server}`);
+            }
+          }
+          return kc;
+        } catch (error) {
+          this.logger.warn('Strategy 1 (Docker Desktop) failed:', error.message);
+          throw error;
+        }
+      },
+
+      // Strategy 2: Use mounted kubeconfig file
+      () => {
+        const kc = new k8s.KubeConfig();
+        const configPath = process.env.KUBE_CONFIG_PATH || '/app/.kube/config';
+        try {
+          if (fs.existsSync(configPath)) {
+            kc.loadFromFile(configPath);
+            // Modify server URL if needed
+            const cluster = kc.getCurrentCluster();
+            if (cluster?.server?.includes('127.0.0.1')) {
+              cluster.server = cluster.server.replace('127.0.0.1', 'host.docker.internal');
+              this.logger.info(`🔄 Modified mounted config server URL to: ${cluster.server}`);
+            }
+            return kc;
+          } else {
+            throw new Error(`Config file not found at ${configPath}`);
+          }
+        } catch (error) {
+          this.logger.warn('Strategy 2 (Mounted config) failed:', error.message);
+          throw error;
+        }
+      },
+
+      // Strategy 3: In-cluster config (for when running in Kubernetes)
+      () => {
+        const kc = new k8s.KubeConfig();
+        try {
+          kc.loadFromCluster();
+          return kc;
+        } catch (error) {
+          this.logger.warn('Strategy 3 (In-cluster) failed:', error.message);
+          throw error;
+        }
+      },
+
+      // Strategy 4: Environment variables
+      () => {
+        const kc = new k8s.KubeConfig();
+        try {
+          const server = `https://${process.env.KUBERNETES_SERVICE_HOST || 'host.docker.internal'}:${process.env.KUBERNETES_SERVICE_PORT || '65168'}`;
+          
+          // Create a basic config with environment variables
+          const cluster = {
+            name: 'docker-desktop',
+            server: server,
+            skipTLSVerify: true,
+          };
+          
+          const user = {
+            name: 'docker-desktop',
+            // Try to get token from service account if available
+            token: process.env.KUBERNETES_SERVICE_TOKEN || undefined,
+          };
+          
+          const context = {
+            name: 'docker-desktop',
+            cluster: 'docker-desktop',
+            user: 'docker-desktop',
+          };
+          
+          kc.loadFromOptions({
+            clusters: [cluster],
+            users: [user],
+            contexts: [context],
+            currentContext: 'docker-desktop',
+          });
+          
+          this.logger.info(`🔄 Using environment config with server: ${server}`);
+          return kc;
+        } catch (error) {
+          this.logger.warn('Strategy 4 (Environment) failed:', error.message);
+          throw error;
+        }
+      },
+
+      // Strategy 5: Default loader with localhost fallback
+      () => {
+        const kc = new k8s.KubeConfig();
+        try {
+          kc.loadFromDefault();
+          return kc;
+        } catch (error) {
+          this.logger.warn('Strategy 5 (Default) failed:', error.message);
+          throw error;
+        }
+      },
+
+      // Strategy 6: Last resort - direct localhost attempt
+      () => {
+        const kc = new k8s.KubeConfig();
+        try {
+          const cluster = {
+            name: 'docker-desktop-direct',
+            server: 'https://127.0.0.1:65168',
+            skipTLSVerify: true,
+          };
+          
+          const user = {
+            name: 'docker-desktop-direct',
+          };
+          
+          const context = {
+            name: 'docker-desktop-direct',
+            cluster: 'docker-desktop-direct',
+            user: 'docker-desktop-direct',
+          };
+          
+          kc.loadFromOptions({
+            clusters: [cluster],
+            users: [user],
+            contexts: [context],
+            currentContext: 'docker-desktop-direct',
+          });
+          
+          this.logger.info('🔄 Using direct localhost connection');
+          return kc;
+        } catch (error) {
+          this.logger.warn('Strategy 6 (Direct localhost) failed:', error.message);
+          throw error;
+        }
+      },
+    ];
+  }
+
   private initializeKubernetesClient(): void {
-    try {
-      const kc = new k8s.KubeConfig();
-      
-      // For Docker Desktop, use the default context
-      if (process.env.NODE_ENV === 'production' || process.env.DOCKER_CONTEXT) {
-        kc.loadFromDefault();
-      } else {
-        // For development, you might want to load from a specific config file
-        kc.loadFromDefault();
+    let lastError: Error | null = null;
+    
+    for (let i = 0; i < this.connectionStrategies.length; i++) {
+      try {
+        this.logger.info(`🔄 Trying connection strategy ${i + 1}/${this.connectionStrategies.length}`);
+        
+        const kc = this.connectionStrategies[i]();
+        this.currentStrategy = i;
+        
+        // Log connection details for debugging
+        const currentCluster = kc.getCurrentCluster();
+        this.logger.info(`📡 Attempting connection to: ${currentCluster?.server || 'unknown'}`);
+        
+        this.k8sApi = kc.makeApiClient(k8s.KubernetesApi);
+        this.coreV1Api = kc.makeApiClient(k8s.CoreV1Api);
+        this.customObjectsApi = kc.makeApiClient(k8s.CustomObjectsApi);
+        this.appsV1Api = kc.makeApiClient(k8s.AppsV1Api);
+
+        this.logger.info(`✅ Kubernetes client initialized with strategy ${i + 1}`);
+        
+        // Validate connection asynchronously
+        this.validateConnection()
+          .then(() => {
+            this.logger.info('✅ Connection validated successfully');
+            this.emit('connected');
+          })
+          .catch((error) => {
+            this.logger.error('❌ Connection validation failed:', error);
+            this.emit('disconnected', error);
+          });
+        
+        return; // Success, exit the loop
+      } catch (error) {
+        lastError = error;
+        this.logger.warn(`❌ Strategy ${i + 1} failed:`, error.message);
+        continue;
       }
-
-      this.k8sApi = kc.makeApiClient(k8s.KubernetesApi);
-      this.coreV1Api = kc.makeApiClient(k8s.CoreV1Api);
-      this.customObjectsApi = kc.makeApiClient(k8s.CustomObjectsApi);
-      this.appsV1Api = kc.makeApiClient(k8s.AppsV1Api);
-
-      this.logger.info('✅ Kubernetes client initialized');
-      this.validateConnection();
-    } catch (error) {
-      this.logger.error('❌ Failed to initialize Kubernetes client:', error);
-      throw new KubernetesError('Failed to initialize Kubernetes client');
     }
+    
+    // All strategies failed
+    this.logger.error('❌ All connection strategies failed. Last error:', lastError);
+    throw new KubernetesError(`Failed to initialize Kubernetes client: ${lastError?.message}`);
   }
 
   private async validateConnection(): Promise<void> {
     try {
+      const startTime = Date.now();
       await this.coreV1Api.listNamespaces();
-      this.logger.info('✅ Kubernetes connection validated');
+      const endTime = Date.now();
+      
+      this.logger.info(`✅ Kubernetes connection validated in ${endTime - startTime}ms`);
     } catch (error) {
       this.logger.error('❌ Kubernetes connection validation failed:', error);
-      throw new KubernetesError('Failed to connect to Kubernetes cluster');
+      throw new KubernetesError(`Failed to connect to Kubernetes cluster: ${error.message}`);
     }
+  }
+
+  /**
+   * Force reconnection to Kubernetes
+   */
+  public async reconnect(): Promise<void> {
+    try {
+      this.logger.info('🔄 Attempting to reconnect to Kubernetes...');
+      
+      // Reset current strategy and try again
+      this.currentStrategy = 0;
+      this.initializeKubernetesClient();
+      
+      this.logger.info('✅ Reconnection attempt completed');
+    } catch (error) {
+      this.logger.error('❌ Reconnection failed:', error);
+      throw new KubernetesError(`Failed to reconnect: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get detailed connection diagnostics
+   */
+  public async getConnectionDiagnostics(): Promise<any> {
+    const diagnostics = {
+      strategies: [],
+      currentStrategy: this.currentStrategy,
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        KUBE_CONFIG_PATH: process.env.KUBE_CONFIG_PATH,
+        KUBERNETES_SERVICE_HOST: process.env.KUBERNETES_SERVICE_HOST,
+        KUBERNETES_SERVICE_PORT: process.env.KUBERNETES_SERVICE_PORT,
+      },
+      kubeconfig: {
+        defaultPath: path.join(require('os').homedir(), '.kube', 'config'),
+        mountedPath: '/app/.kube/config',
+        defaultExists: false,
+        mountedExists: false,
+      },
+    };
+
+    // Check kubeconfig file existence
+    try {
+      diagnostics.kubeconfig.defaultExists = fs.existsSync(diagnostics.kubeconfig.defaultPath);
+      diagnostics.kubeconfig.mountedExists = fs.existsSync(diagnostics.kubeconfig.mountedPath);
+    } catch (error) {
+      this.logger.warn('Error checking kubeconfig files:', error);
+    }
+
+    // Test each strategy
+    for (let i = 0; i < this.connectionStrategies.length; i++) {
+      try {
+        const kc = this.connectionStrategies[i]();
+        const cluster = kc.getCurrentCluster();
+        diagnostics.strategies.push({
+          index: i + 1,
+          status: 'success',
+          server: cluster?.server || 'unknown',
+          name: cluster?.name || 'unknown',
+        });
+      } catch (error) {
+        diagnostics.strategies.push({
+          index: i + 1,
+          status: 'failed',
+          error: error.message,
+        });
+      }
+    }
+
+    return diagnostics;
   }
 
   /**
@@ -666,13 +911,17 @@ export class KubernetesService extends EventEmitter {
           platform: version.body.platform,
           namespaceCount: namespaces.body.items.length,
           envoyGatewayInstalled: await this.isEnvoyGatewayInstalled(),
+          connectionStrategy: this.currentStrategy + 1,
         },
       };
     } catch (error) {
       this.logger.error('Kubernetes health check failed:', error);
       return {
         status: 'unhealthy',
-        details: { error: error.message },
+        details: { 
+          error: error.message,
+          connectionStrategy: this.currentStrategy + 1,
+        },
       };
     }
   }

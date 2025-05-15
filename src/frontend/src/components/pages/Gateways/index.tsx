@@ -1,8 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../../store';
-import { fetchGateways, createGateway, deleteGateway } from '../../../store/slices/gatewaySlice';
-import { Card, Button, LoadingSpinner, Modal, Table } from '../../common';
+import { 
+  fetchGateways, 
+  createGateway, 
+  deleteGateway, 
+  fetchNamespaces,
+  setNamespaceFilter,
+  toggleShowAllNamespaces,
+} from '../../../store/slices/gatewaySlice';
+import { Card, Button, LoadingSpinner, Modal, Table, NamespaceSelector } from '../../common';
 import type { Gateway } from '../../../types';
 
 interface GatewayFormData {
@@ -19,7 +26,16 @@ interface GatewayFormData {
 
 const Gateways: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { gateways, loading, error } = useSelector((state: RootState) => state.gateway);
+  const { 
+    gateways, 
+    loading, 
+    error, 
+    namespaces, 
+    namespaceCounts,
+    filters,
+    total,
+  } = useSelector((state: RootState) => state.gateway);
+  
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [formData, setFormData] = useState<GatewayFormData>({
     name: '',
@@ -33,8 +49,15 @@ const Gateways: React.FC = () => {
   });
 
   useEffect(() => {
-    dispatch(fetchGateways());
-  }, [dispatch]);
+    // Fetch namespaces first
+    dispatch(fetchNamespaces());
+    
+    // Then fetch gateways with current filter settings
+    dispatch(fetchGateways({
+      namespace: filters.namespace,
+      showAllNamespaces: filters.showAllNamespaces,
+    }));
+  }, [dispatch, filters.namespace, filters.showAllNamespaces]);
 
   const handleCreate = async () => {
     await dispatch(createGateway(formData));
@@ -43,7 +66,7 @@ const Gateways: React.FC = () => {
   };
 
   const handleDelete = async (name: string, namespace: string) => {
-    if (window.confirm(`Are you sure you want to delete gateway ${name}?`)) {
+    if (window.confirm(`Are you sure you want to delete gateway ${namespace}/${name}?`)) {
       await dispatch(deleteGateway({ name, namespace }));
     }
   };
@@ -51,7 +74,7 @@ const Gateways: React.FC = () => {
   const resetForm = () => {
     setFormData({
       name: '',
-      namespace: 'default',
+      namespace: filters.namespace || 'default',
       gatewayClassName: 'envoy-gateway',
       listeners: [{
         name: 'http',
@@ -86,6 +109,14 @@ const Gateways: React.FC = () => {
       ...prev,
       listeners: prev.listeners.filter((_, i) => i !== index)
     }));
+  };
+
+  const handleNamespaceChange = (namespace: string) => {
+    dispatch(setNamespaceFilter(namespace));
+  };
+
+  const handleToggleAllNamespaces = () => {
+    dispatch(toggleShowAllNamespaces());
   };
 
   const gatewayColumns = [
@@ -128,13 +159,35 @@ const Gateways: React.FC = () => {
 
   if (loading) return <LoadingSpinner />;
 
+  const filteredNamespacesText = filters.showAllNamespaces 
+    ? `All Namespaces (${total} total)`
+    : `Namespace: ${filters.namespace || 'default'} (${namespaceCounts[filters.namespace || 'default'] || 0})`;
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Gateways</h1>
-        <Button onClick={() => setIsCreateModalOpen(true)}>
-          Create Gateway
-        </Button>
+        <div className="flex gap-3 items-center">
+          <div className="w-64">
+            <NamespaceSelector
+              selectedNamespace={filters.namespace}
+              onNamespaceChange={handleNamespaceChange}
+              showAllNamespaces={filters.showAllNamespaces}
+              onToggleAllNamespaces={handleToggleAllNamespaces}
+              namespaces={namespaces}
+              namespaceCounts={namespaceCounts}
+              loading={loading}
+              placeholder="Select namespace..."
+            />
+          </div>
+          <Button onClick={() => setIsCreateModalOpen(true)}>
+            Create Gateway
+          </Button>
+        </div>
+      </div>
+
+      <div className="mb-4 text-sm text-gray-600">
+        {filteredNamespacesText}
       </div>
 
       {error && (
@@ -147,7 +200,7 @@ const Gateways: React.FC = () => {
         <Table
           columns={gatewayColumns}
           data={gatewayRows}
-          emptyMessage="No gateways found. Create your first gateway to get started."
+          emptyMessage={`No gateways found${filters.showAllNamespaces ? '' : ` in namespace '${filters.namespace || 'default'}'`}. Create your first gateway to get started.`}
         />
       </Card>
 

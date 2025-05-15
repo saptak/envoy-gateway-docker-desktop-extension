@@ -2,41 +2,86 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { Gateway } from '@/types';
 import { apiService } from '@/services/api';
 
+interface NamespaceInfo {
+  name: string;
+  gatewayCount: number;
+  routeCount: number;
+  totalResources: number;
+  error?: string;
+}
+
 interface GatewayState {
   gateways: Gateway[];
   selectedGateway: Gateway | null;
+  namespaces: NamespaceInfo[];
+  namespaceCounts: Record<string, number>;
   loading: boolean;
   error: string | null;
   filters: {
     namespace: string;
     status: string;
     search: string;
+    showAllNamespaces: boolean;
   };
   sortBy: 'name' | 'namespace' | 'created' | 'status';
   sortOrder: 'asc' | 'desc';
+  total: number;
 }
 
 const initialState: GatewayState = {
   gateways: [],
   selectedGateway: null,
+  namespaces: [],
+  namespaceCounts: {},
   loading: false,
   error: null,
   filters: {
     namespace: '',
     status: '',
     search: '',
+    showAllNamespaces: true, // Default to showing all namespaces
   },
   sortBy: 'name',
   sortOrder: 'asc',
+  total: 0,
 };
 
 // Async thunks
+export const fetchNamespaces = createAsyncThunk(
+  'gateways/fetchNamespaces',
+  async (includeEmpty = false, { rejectWithValue }) => {
+    try {
+      const namespaces = await apiService.getNamespaces(includeEmpty);
+      return namespaces;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to fetch namespaces');
+    }
+  }
+);
+
 export const fetchGateways = createAsyncThunk(
   'gateways/fetchGateways',
-  async (_, { rejectWithValue }) => {
+  async (options: { namespace?: string; showAllNamespaces?: boolean } = {}, { rejectWithValue }) => {
     try {
-      const gateways = await apiService.getGateways();
-      return gateways;
+      if (options.showAllNamespaces || !options.namespace) {
+        // Fetch gateways across all namespaces
+        const result = await apiService.getGatewaysAcrossAllNamespaces();
+        return {
+          gateways: result.gateways,
+          total: result.total,
+          namespaceCounts: result.namespaceCounts,
+          isAllNamespaces: true,
+        };
+      } else {
+        // Fetch gateways from specific namespace
+        const gateways = await apiService.getGateways({ namespace: options.namespace });
+        return {
+          gateways,
+          total: gateways.length,
+          namespaceCounts: { [options.namespace]: gateways.length },
+          isAllNamespaces: false,
+        };
+      }
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch gateways');
     }
@@ -122,9 +167,29 @@ const gatewaySlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+    setNamespaceFilter: (state, action: PayloadAction<string>) => {
+      state.filters.namespace = action.payload;
+      state.filters.showAllNamespaces = !action.payload;
+    },
+    toggleShowAllNamespaces: (state) => {
+      state.filters.showAllNamespaces = !state.filters.showAllNamespaces;
+      if (state.filters.showAllNamespaces) {
+        state.filters.namespace = '';
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
+      // fetchNamespaces
+      .addCase(fetchNamespaces.pending, (state) => {
+        // Don't set loading for namespaces to avoid blocking UI
+      })
+      .addCase(fetchNamespaces.fulfilled, (state, action) => {
+        state.namespaces = action.payload;
+      })
+      .addCase(fetchNamespaces.rejected, (state, action) => {
+        console.warn('Failed to fetch namespaces:', action.payload);
+      })
       // fetchGateways
       .addCase(fetchGateways.pending, (state) => {
         state.loading = true;
@@ -132,7 +197,9 @@ const gatewaySlice = createSlice({
       })
       .addCase(fetchGateways.fulfilled, (state, action) => {
         state.loading = false;
-        state.gateways = action.payload;
+        state.gateways = action.payload.gateways;
+        state.total = action.payload.total;
+        state.namespaceCounts = action.payload.namespaceCounts;
       })
       .addCase(fetchGateways.rejected, (state, action) => {
         state.loading = false;
@@ -168,6 +235,11 @@ const gatewaySlice = createSlice({
         state.loading = false;
         state.gateways.push(action.payload);
         state.selectedGateway = action.payload;
+        
+        // Update namespace count
+        const namespace = action.payload.namespace;
+        state.namespaceCounts[namespace] = (state.namespaceCounts[namespace] || 0) + 1;
+        state.total += 1;
       })
       .addCase(createGateway.rejected, (state, action) => {
         state.loading = false;
@@ -210,6 +282,13 @@ const gatewaySlice = createSlice({
         ) {
           state.selectedGateway = null;
         }
+        
+        // Update namespace count
+        const namespace = action.payload.namespace;
+        if (state.namespaceCounts[namespace] > 0) {
+          state.namespaceCounts[namespace] -= 1;
+        }
+        state.total -= 1;
       })
       .addCase(deleteGateway.rejected, (state, action) => {
         state.loading = false;
@@ -224,6 +303,8 @@ export const {
   setSorting,
   updateGatewayStatus,
   clearError,
+  setNamespaceFilter,
+  toggleShowAllNamespaces,
 } = gatewaySlice.actions;
 
 export default gatewaySlice.reducer;

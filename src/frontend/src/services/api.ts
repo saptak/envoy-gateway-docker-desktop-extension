@@ -15,6 +15,26 @@ import {
   TestResult
 } from '@/types';
 
+interface NamespaceInfo {
+  name: string;
+  gatewayCount: number;
+  routeCount: number;
+  totalResources: number;
+  error?: string;
+}
+
+interface GatewayQueryOptions {
+  namespace?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+interface RouteQueryOptions {
+  namespace?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 class ApiService {
   private client: AxiosInstance;
   private baseURL: string;
@@ -86,6 +106,22 @@ class ApiService {
     }
   }
 
+  // Namespace Management
+  async getNamespaces(includeEmpty = false): Promise<NamespaceInfo[]> {
+    return this.request<NamespaceInfo[]>({
+      method: 'GET',
+      url: '/namespaces',
+      params: { includeEmpty }
+    });
+  }
+
+  async getNamespacesWithResources(): Promise<NamespaceInfo[]> {
+    return this.request<NamespaceInfo[]>({
+      method: 'GET',
+      url: '/namespaces/with-resources'
+    });
+  }
+
   // System Status
   async getSystemStatus(): Promise<SystemStatus> {
     return this.request<SystemStatus>({
@@ -147,10 +183,27 @@ class ApiService {
   }
 
   // Gateway Management
-  async getGateways(): Promise<Gateway[]> {
+  async getGateways(options: GatewayQueryOptions = {}): Promise<Gateway[]> {
     return this.request<Gateway[]>({
       method: 'GET',
-      url: '/gateways'
+      url: '/gateways',
+      params: options
+    });
+  }
+
+  async getGatewaysAcrossAllNamespaces(options: { page?: number; pageSize?: number } = {}): Promise<{
+    gateways: Gateway[];
+    total: number;
+    namespaceCounts: Record<string, number>;
+  }> {
+    return this.request<{
+      gateways: Gateway[];
+      total: number;
+      namespaceCounts: Record<string, number>;
+    }>({
+      method: 'GET',
+      url: '/gateways/all-namespaces',
+      params: options
     });
   }
 
@@ -185,10 +238,27 @@ class ApiService {
   }
 
   // HTTPRoute Management
-  async getHTTPRoutes(): Promise<HTTPRoute[]> {
+  async getHTTPRoutes(options: RouteQueryOptions = {}): Promise<HTTPRoute[]> {
     return this.request<HTTPRoute[]>({
       method: 'GET',
-      url: '/routes'
+      url: '/routes',
+      params: options
+    });
+  }
+
+  async getHTTPRoutesAcrossAllNamespaces(options: { page?: number; pageSize?: number } = {}): Promise<{
+    routes: HTTPRoute[];
+    total: number;
+    namespaceCounts: Record<string, number>;
+  }> {
+    return this.request<{
+      routes: HTTPRoute[];
+      total: number;
+      namespaceCounts: Record<string, number>;
+    }>({
+      method: 'GET',
+      url: '/routes/all-namespaces',
+      params: options
     });
   }
 

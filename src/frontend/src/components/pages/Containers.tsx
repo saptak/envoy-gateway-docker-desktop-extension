@@ -38,7 +38,7 @@ import {
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
   Search as SearchIcon,
-  Container as ContainerIcon,
+  ViewInAr as ContainerIcon,
   MoreVert as MoreVertIcon,
   Visibility as ViewIcon,
   GetApp as DownloadIcon,

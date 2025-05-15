@@ -1,6 +1,6 @@
 services:
   envoy-gateway-service:
-    image: envoy-gateway-extension:latest
+    build: .
     ports:
       - "8080:8080"
     environment:

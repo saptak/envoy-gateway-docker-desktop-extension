@@ -15,6 +15,7 @@ import gatewayRoutes from './controllers/gatewayController';
 import routeRoutes from './controllers/routeController';
 import healthRoutes from './controllers/healthController';
 import configRoutes from './controllers/configController';
+import namespaceRoutes from './controllers/namespaceController';
 
 import { WebSocketService } from './services/websocketService';
 import { LoggerService } from './utils/logger';
@@ -92,6 +93,7 @@ class Application {
     this.app.use('/api/gateways', gatewayRoutes);
     this.app.use('/api/routes', routeRoutes);
     this.app.use('/api/config', configRoutes);
+    this.app.use('/api/namespaces', namespaceRoutes);
 
     // Root route
     this.app.get('/', (req, res) => {

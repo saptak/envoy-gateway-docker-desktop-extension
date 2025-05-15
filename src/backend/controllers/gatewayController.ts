@@ -53,7 +53,80 @@ router.get(
           pageSize,
           hasNext: endIndex < gateways.length,
         },
-        message: `Found ${gateways.length} gateway(s)`,
+        message: `Found ${gateways.length} gateway(s) in ${namespace ? `namespace ${namespace}` : 'default namespace'}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route GET /api/gateways/all-namespaces
+ * @desc List all gateways across all namespaces
+ * @access Public
+ */
+router.get(
+  '/all-namespaces',
+  validatePagination,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { page, pageSize } = req.query as { page: number; pageSize: number };
+
+      logger.info(`Listing gateways across all namespaces`, { page, pageSize });
+
+      // Get all namespaces first
+      const namespaces = await kubernetesService.listNamespaces();
+      
+      // Get gateways from all namespaces
+      const allGateways: (Gateway & { namespace: string })[] = [];
+      
+      for (const namespace of namespaces) {
+        try {
+          const gateways = await kubernetesService.listGateways(namespace);
+          allGateways.push(...gateways.map(gateway => ({ ...gateway, namespace })));
+        } catch (error) {
+          logger.warn(`Error listing gateways in namespace ${namespace}:`, error);
+        }
+      }
+
+      // Sort by namespace then by name
+      allGateways.sort((a, b) => {
+        if (a.namespace !== b.namespace) {
+          return a.namespace.localeCompare(b.namespace);
+        }
+        return a.name.localeCompare(b.name);
+      });
+
+      // Apply pagination
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedGateways = allGateways.slice(startIndex, endIndex);
+
+      const response: ApiResponse<{
+        gateways: Gateway[];
+        total: number;
+        page: number;
+        pageSize: number;
+        hasNext: boolean;
+        namespaceCounts: Record<string, number>;
+      }> = {
+        success: true,
+        data: {
+          gateways: paginatedGateways,
+          total: allGateways.length,
+          page,
+          pageSize,
+          hasNext: endIndex < allGateways.length,
+          namespaceCounts: namespaces.reduce((acc, ns) => {
+            acc[ns] = allGateways.filter(g => g.namespace === ns).length;
+            return acc;
+          }, {} as Record<string, number>),
+        },
+        message: `Found ${allGateways.length} gateway(s) across ${namespaces.length} namespace(s)`,
         timestamp: new Date().toISOString(),
       };
 

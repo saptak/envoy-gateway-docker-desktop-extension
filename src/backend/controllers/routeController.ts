@@ -52,7 +52,80 @@ router.get(
           pageSize,
           hasNext: endIndex < routes.length,
         },
-        message: `Found ${routes.length} route(s)`,
+        message: `Found ${routes.length} route(s) in ${namespace ? `namespace ${namespace}` : 'default namespace'}`,
+        timestamp: new Date().toISOString(),
+      };
+
+      res.json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @route GET /api/routes/all-namespaces
+ * @desc List all HTTP routes across all namespaces
+ * @access Public
+ */
+router.get(
+  '/all-namespaces',
+  validatePagination,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { page, pageSize } = req.query as { page: number; pageSize: number };
+
+      logger.info(`Listing HTTP routes across all namespaces`, { page, pageSize });
+
+      // Get all namespaces first
+      const namespaces = await kubernetesService.listNamespaces();
+      
+      // Get routes from all namespaces
+      const allRoutes: (HTTPRoute & { namespace: string })[] = [];
+      
+      for (const namespace of namespaces) {
+        try {
+          const routes = await kubernetesService.listHTTPRoutes(namespace);
+          allRoutes.push(...routes.map(route => ({ ...route, namespace })));
+        } catch (error) {
+          logger.warn(`Error listing routes in namespace ${namespace}:`, error);
+        }
+      }
+
+      // Sort by namespace then by name
+      allRoutes.sort((a, b) => {
+        if (a.namespace !== b.namespace) {
+          return a.namespace.localeCompare(b.namespace);
+        }
+        return a.name.localeCompare(b.name);
+      });
+
+      // Apply pagination
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedRoutes = allRoutes.slice(startIndex, endIndex);
+
+      const response: ApiResponse<{
+        routes: HTTPRoute[];
+        total: number;
+        page: number;
+        pageSize: number;
+        hasNext: boolean;
+        namespaceCounts: Record<string, number>;
+      }> = {
+        success: true,
+        data: {
+          routes: paginatedRoutes,
+          total: allRoutes.length,
+          page,
+          pageSize,
+          hasNext: endIndex < allRoutes.length,
+          namespaceCounts: namespaces.reduce((acc, ns) => {
+            acc[ns] = allRoutes.filter(r => r.namespace === ns).length;
+            return acc;
+          }, {} as Record<string, number>),
+        },
+        message: `Found ${allRoutes.length} route(s) across ${namespaces.length} namespace(s)`,
         timestamp: new Date().toISOString(),
       };
 

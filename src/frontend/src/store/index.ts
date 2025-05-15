@@ -9,6 +9,7 @@ import routeReducer from './slices/routeSlice';
 import containerReducer from './slices/containerSlice';
 import monitoringReducer from './slices/monitoringSlice';
 import testingReducer from './slices/testingSlice';
+import namespaceReducer from './slices/namespaceSlice';
 
 // Configure store
 export const store = configureStore({
@@ -20,6 +21,7 @@ export const store = configureStore({
     containers: containerReducer,
     monitoring: monitoringReducer,
     testing: testingReducer,
+    namespace: namespaceReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

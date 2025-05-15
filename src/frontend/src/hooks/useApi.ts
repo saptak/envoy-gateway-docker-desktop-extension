@@ -83,10 +83,15 @@ export const useSystemStatus = () => {
 export const useGateways = () => {
   const dispatch = useAppDispatch();
   const { gateways, loading, error, filters, sortBy, sortOrder } = useAppSelector(state => state.gateways);
+  const { selectedNamespace } = useAppSelector(state => state.namespace);
 
   const refresh = useCallback(() => {
-    dispatch(fetchGateways());
-  }, [dispatch]);
+    // Use the selected namespace from the global state
+    dispatch(fetchGateways({
+      namespace: selectedNamespace,
+      showAllNamespaces: !selectedNamespace
+    }));
+  }, [dispatch, selectedNamespace]);
 
   const create = useCallback(async (gateway: Partial<Gateway>) => {
     try {
@@ -97,6 +102,8 @@ export const useGateways = () => {
         message: `Gateway ${gateway.name} created successfully`,
         duration: 3000
       }));
+      // Refresh after creating
+      refresh();
     } catch (error: any) {
       dispatch(addNotification({
         type: 'error',
@@ -106,7 +113,7 @@ export const useGateways = () => {
       }));
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, refresh]);
 
   const update = useCallback(async (namespace: string, name: string, gateway: Partial<Gateway>) => {
     try {
@@ -117,6 +124,8 @@ export const useGateways = () => {
         message: `Gateway ${name} updated successfully`,
         duration: 3000
       }));
+      // Refresh after updating
+      refresh();
     } catch (error: any) {
       dispatch(addNotification({
         type: 'error',
@@ -126,7 +135,7 @@ export const useGateways = () => {
       }));
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, refresh]);
 
   const remove = useCallback(async (namespace: string, name: string) => {
     try {
@@ -137,6 +146,8 @@ export const useGateways = () => {
         message: `Gateway ${name} deleted successfully`,
         duration: 3000
       }));
+      // Refresh after deleting
+      refresh();
     } catch (error: any) {
       dispatch(addNotification({
         type: 'error',
@@ -146,11 +157,12 @@ export const useGateways = () => {
       }));
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, refresh]);
 
+  // Refresh when selected namespace changes
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, selectedNamespace]);
 
   // Filter and sort gateways
   const filteredGateways = gateways.filter(gateway => {
@@ -209,10 +221,15 @@ export const useGateway = (namespace: string, name: string) => {
 export const useRoutes = () => {
   const dispatch = useAppDispatch();
   const { routes, loading, error, filters, sortBy, sortOrder } = useAppSelector(state => state.routes);
+  const { selectedNamespace } = useAppSelector(state => state.namespace);
 
   const refresh = useCallback(() => {
-    dispatch(fetchRoutes());
-  }, [dispatch]);
+    // Use the selected namespace from the global state
+    dispatch(fetchRoutes({
+      namespace: selectedNamespace,
+      showAllNamespaces: !selectedNamespace
+    }));
+  }, [dispatch, selectedNamespace]);
 
   const create = useCallback(async (route: Partial<HTTPRoute>) => {
     try {
@@ -223,6 +240,8 @@ export const useRoutes = () => {
         message: `Route ${route.name} created successfully`,
         duration: 3000
       }));
+      // Refresh after creating
+      refresh();
     } catch (error: any) {
       dispatch(addNotification({
         type: 'error',
@@ -232,7 +251,7 @@ export const useRoutes = () => {
       }));
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, refresh]);
 
   const update = useCallback(async (namespace: string, name: string, route: Partial<HTTPRoute>) => {
     try {
@@ -243,6 +262,8 @@ export const useRoutes = () => {
         message: `Route ${name} updated successfully`,
         duration: 3000
       }));
+      // Refresh after updating
+      refresh();
     } catch (error: any) {
       dispatch(addNotification({
         type: 'error',
@@ -252,7 +273,7 @@ export const useRoutes = () => {
       }));
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, refresh]);
 
   const remove = useCallback(async (namespace: string, name: string) => {
     try {
@@ -263,6 +284,8 @@ export const useRoutes = () => {
         message: `Route ${name} deleted successfully`,
         duration: 3000
       }));
+      // Refresh after deleting
+      refresh();
     } catch (error: any) {
       dispatch(addNotification({
         type: 'error',
@@ -272,11 +295,12 @@ export const useRoutes = () => {
       }));
       throw error;
     }
-  }, [dispatch]);
+  }, [dispatch, refresh]);
 
+  // Refresh when selected namespace changes
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, selectedNamespace]);
 
   // Filter and sort routes
   const filteredRoutes = routes.filter(route => {

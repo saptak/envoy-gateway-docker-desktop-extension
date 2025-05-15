@@ -86,6 +86,110 @@ router.get('/', async (req: Request, res: Response, next: NextFunction): Promise
 });
 
 /**
+ * @route POST /api/health/reconnect
+ * @desc Force reconnection to Kubernetes cluster
+ * @access Public
+ */
+router.post('/reconnect', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    logger.info('Kubernetes reconnection requested');
+
+    const startTime = Date.now();
+
+    // Get diagnostics before reconnecting
+    const beforeDiagnostics = await kubernetesService.getConnectionDiagnostics();
+    
+    // Attempt reconnection
+    await kubernetesService.reconnect();
+    
+    // Get health status after reconnection
+    const afterHealth = await kubernetesService.healthCheck();
+    const afterDiagnostics = await kubernetesService.getConnectionDiagnostics();
+
+    const endTime = Date.now();
+    const responseTime = endTime - startTime;
+
+    const reconnectResult = {
+      success: afterHealth.status === 'healthy',
+      reconnectionTime: `${responseTime}ms`,
+      before: {
+        status: 'disconnected',
+        connectionStrategy: beforeDiagnostics.currentStrategy,
+      },
+      after: {
+        status: afterHealth.status,
+        connectionStrategy: afterDiagnostics.currentStrategy,
+        version: afterHealth.version,
+        details: afterHealth.details,
+      },
+      diagnostics: afterDiagnostics,
+      timestamp: new Date().toISOString(),
+    };
+
+    const response: ApiResponse<typeof reconnectResult> = {
+      success: reconnectResult.success,
+      data: reconnectResult,
+      message: reconnectResult.success 
+        ? 'Successfully reconnected to Kubernetes'
+        : 'Reconnection attempted but connection still unhealthy',
+      timestamp: new Date().toISOString(),
+    };
+
+    const statusCode = reconnectResult.success ? 200 : 503;
+    res.status(statusCode).json(response);
+  } catch (error) {
+    logger.error('Kubernetes reconnection failed:', error);
+    
+    const response: ApiResponse = {
+      success: false,
+      error: 'Reconnection failed',
+      message: error.message || 'Unable to reconnect to Kubernetes',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.status(503).json(response);
+  }
+});
+
+/**
+ * @route GET /api/health/diagnostics
+ * @desc Get connection diagnostics for troubleshooting
+ * @access Public
+ */
+router.get('/diagnostics', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    logger.info('Connection diagnostics requested');
+
+    const diagnostics = await kubernetesService.getConnectionDiagnostics();
+    const health = await kubernetesService.healthCheck();
+
+    const detailedDiagnostics = {
+      connectionHealth: health,
+      connectionDiagnostics: diagnostics,
+      systemInfo: {
+        platform: process.platform,
+        arch: process.arch,
+        nodeVersion: process.version,
+        kubeConfigPath: process.env.KUBE_CONFIG_PATH,
+        inDocker: process.env.NODE_ENV === 'production',
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    const response: ApiResponse<typeof detailedDiagnostics> = {
+      success: true,
+      data: detailedDiagnostics,
+      message: 'Connection diagnostics retrieved successfully',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json(response);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * @route GET /api/health/liveness
  * @desc Kubernetes liveness probe endpoint
  * @access Public

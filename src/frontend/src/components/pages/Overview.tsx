@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -30,14 +30,16 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 
-import { useAppSelector } from '@/hooks/redux';
+import { useAppSelector, useAppDispatch } from '@/hooks/redux';
 import { useSystemStatus, useGateways, useRoutes, useContainers, useMonitoring } from '@/hooks/useApi';
-import { MetricCard, StatusBadge } from '@/components/common';
+import { MetricCard, StatusBadge, NamespaceSelector } from '@/components/common';
 import { formatNumber, formatBytes, formatPercentage, getConditionStatus } from '@/utils';
+import { fetchNamespaces, setSelectedNamespace } from '@/store/slices/namespaceSlice';
 
 const Overview: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
   
   const { status: systemStatus, connected, refresh: refreshSystem } = useSystemStatus();
   const { gateways } = useGateways();
@@ -45,34 +47,58 @@ const Overview: React.FC = () => {
   const { containers } = useContainers();
   const { currentMetrics } = useMonitoring();
 
+  // Namespace state
+  const { namespaces, selectedNamespace, loading: namespacesLoading } = useAppSelector(state => state.namespace);
+
+  useEffect(() => {
+    // Fetch namespaces on component mount
+    dispatch(fetchNamespaces(false));
+  }, [dispatch]);
+
   const handleNavigate = (path: string) => {
     navigate(path);
   };
 
   const handleRefresh = () => {
     refreshSystem();
+    dispatch(fetchNamespaces(false));
   };
+
+  const handleNamespaceChange = (namespace: string) => {
+    dispatch(setSelectedNamespace(namespace));
+  };
+
+  // Filter resources based on selected namespace
+  const filteredGateways = React.useMemo(() => {
+    if (!selectedNamespace) return gateways;
+    return gateways.filter(g => g.namespace === selectedNamespace);
+  }, [gateways, selectedNamespace]);
+
+  const filteredRoutes = React.useMemo(() => {
+    if (!selectedNamespace) return routes;
+    return routes.filter(r => r.namespace === selectedNamespace);
+  }, [routes, selectedNamespace]);
 
   // Calculate summary statistics
   const stats = React.useMemo(() => {
     const runningContainers = containers.filter(c => c.state === 'running').length;
-    const healthyGateways = gateways.filter(g => 
+    const healthyGateways = filteredGateways.filter(g => 
       getConditionStatus(g.status.conditions).status === 'healthy'
     ).length;
-    const attachedRoutes = routes.filter(r => 
+    const attachedRoutes = filteredRoutes.filter(r => 
       r.status.parents.some(p => p.conditions.some(c => c.type === 'Accepted' && c.status === 'True'))
     ).length;
 
     return {
       gateways: {
-        total: gateways.length,
+        total: filteredGateways.length,
         healthy: healthyGateways,
-        unhealthy: gateways.length - healthyGateways,
+        unhealthy: filteredGateways.length - healthyGateways,
       },
       routes: {
-        total: routes.length,
+        total: filteredRoutes.length,
         attached: attachedRoutes,
-        detached: routes.length - attachedRoutes,
+        detached: filteredRoutes.length - attachedRoutes,
       },
       containers: {
         total: containers.length,
@@ -80,7 +106,7 @@ const Overview: React.FC = () => {
         stopped: containers.length - runningContainers,
       },
     };
-  }, [gateways, routes, containers]);
+  }, [filteredGateways, filteredRoutes, containers]);
 
   // Quick actions
   const quickActions = [
@@ -148,20 +174,60 @@ const Overview: React.FC = () => {
     }
   };
 
+  // Calculate namespace counts for namespace selector
+  const namespaceCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    gateways.forEach(g => {
+      counts[g.namespace] = (counts[g.namespace] || 0) + 1;
+    });
+    routes.forEach(r => {
+      counts[r.namespace] = (counts[r.namespace] || 0) + 1;
+    });
+    return counts;
+  }, [gateways, routes]);
+
   return (
     <Box sx={{ height: '100%', overflow: 'auto' }}>
       {/* Header */}
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" fontWeight={600}>
-          Dashboard Overview
-        </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={handleRefresh}
-        >
-          Refresh
-        </Button>
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h4" fontWeight={600}>
+            Dashboard Overview
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+          >
+            Refresh
+          </Button>
+        </Box>
+
+        {/* Namespace Selector */}
+        <Box sx={{ mb: 2 }}>
+          <NamespaceSelector
+            selectedNamespace={selectedNamespace}
+            onNamespaceChange={handleNamespaceChange}
+            showAllNamespaces={!selectedNamespace}
+            onToggleAllNamespaces={() => handleNamespaceChange('')}
+            namespaces={namespaces}
+            namespaceCounts={namespaceCounts}
+            loading={namespacesLoading}
+            className="w-64"
+          />
+        </Box>
+
+        {/* Show current namespace filter */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Showing resources in:
+          </Typography>
+          <Chip 
+            label={selectedNamespace || 'All Namespaces'} 
+            size="small" 
+            color={selectedNamespace ? 'primary' : 'default'}
+          />
+        </Box>
       </Box>
 
       {/* System Status Banner */}

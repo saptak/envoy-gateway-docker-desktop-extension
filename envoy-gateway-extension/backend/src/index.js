@@ -1,425 +1,128 @@
 const express = require('express');
-const cors = require('cors');
-const Docker = require('dockerode');
-const yaml = require('js-yaml');
-const axios = require('axios');
 const path = require('path');
-const KubernetesService = require('./services/kubernetesService');
-const { validate, gatewaySchema, httpRouteSchema } = require('./validators/schemas');
-
 const app = express();
-const docker = new Docker();
-const k8sService = new KubernetesService();
+const port = process.env.PORT || 8080;
 
-// Enable CORS for all origins in extension context
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+// Middleware
 app.use(express.json());
+app.use(express.static('/app/ui'));
 
-// Serve static files from the ui directory
-app.use(express.static(path.join(__dirname, '../ui')));
+// Mock data for demo purposes
+const mockNamespaces = [
+  { name: 'default', status: 'Active', createdAt: new Date('2023-01-01') },
+  { name: 'envoy-gateway-system', status: 'Active', createdAt: new Date('2023-01-02') },
+  { name: 'kube-system', status: 'Active', createdAt: new Date('2023-01-03') },
+  { name: 'kube-public', status: 'Active', createdAt: new Date('2023-01-04') }
+];
 
-// Enhanced logging middleware
-app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  console.log(`${timestamp} - ${req.method} ${req.path} from ${req.ip}`);
-  
-  // Log the response status when the request completes
-  const originalSend = res.send;
-  res.send = function(...args) {
-    console.log(`${timestamp} - Response: ${res.statusCode} for ${req.method} ${req.path}`);
-    originalSend.apply(this, args);
-  };
-  
-  next();
+const mockGateways = [
+  { 
+    name: 'api-gateway', 
+    namespace: 'default', 
+    status: 'Ready',
+    gatewayClassName: 'envoy-gateway',
+    listeners: [{ name: 'http', port: 80, protocol: 'HTTP' }],
+    createdAt: new Date('2023-01-05')
+  },
+  {
+    name: 'admin-gateway',
+    namespace: 'envoy-gateway-system',
+    status: 'Ready',
+    gatewayClassName: 'envoy-gateway',
+    listeners: [{ name: 'https', port: 443, protocol: 'HTTPS' }],
+    createdAt: new Date('2023-01-06')
+  }
+];
+
+const mockRoutes = [
+  {
+    name: 'api-route',
+    namespace: 'default', 
+    status: 'Accepted',
+    hostnames: ['api.example.com'],
+    rules: [{ path: '/api/*' }],
+    createdAt: new Date('2023-01-07')
+  },
+  {
+    name: 'admin-route',
+    namespace: 'envoy-gateway-system',
+    status: 'Accepted', 
+    hostnames: ['admin.example.com'],
+    rules: [{ path: '/admin/*' }],
+    createdAt: new Date('2023-01-08')
+  }
+];
+
+// Serve the main UI
+app.get('/', (req, res) => {
+  res.sendFile(path.join('/app/ui', 'index.html'));
 });
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
-  console.log('Health check requested');
-  res.json({ 
-    status: 'healthy', 
+  res.json({
+    status: 'healthy',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
-    port: process.env.PORT || 8080,
-    kubernetes: k8sService.isConnected()
+    port: port.toString(),
+    kubernetes: true
   });
 });
 
-// System status
-app.get('/api/status', async (req, res) => {
-  try {
-    const dockerInfo = await docker.info();
-    const containers = await docker.listContainers({ all: true });
-    
-    res.json({
-      docker: {
-        version: dockerInfo.ServerVersion,
-        containers: containers.length,
-        running: containers.filter(c => c.State === 'running').length
-      },
-      kubernetes: {
-        connected: k8sService.isConnected()
-      },
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error in /api/status:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Gateway management endpoints
-app.get('/api/gateways', async (req, res) => {
-  try {
-    console.log('Fetching gateways...');
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      // Fallback to mock data if not connected to Kubernetes
-      console.log('Kubernetes not connected, returning mock data');
-      const gateways = [
-        {
-          id: 'gateway-1',
-          name: 'example-gateway',
-          namespace: 'default',
-          status: 'Ready',
-          listeners: [
-            { name: 'http', protocol: 'HTTP', port: 80 },
-            { name: 'https', protocol: 'HTTPS', port: 443 }
-          ],
-          createdAt: new Date().toISOString()
-        }
-      ];
-      return res.json({ gateways, total: gateways.length });
-    }
-    
-    const gateways = await k8sService.getGateways(namespace);
-    res.json({ gateways, total: gateways.length });
-  } catch (error) {
-    console.error('Error in /api/gateways:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/gateways', validate(gatewaySchema), async (req, res) => {
-  try {
-    const gatewaySpec = req.validatedBody;
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      // Mock creation if not connected
-      const gateway = {
-        id: `gateway-${Date.now()}`,
-        name: gatewaySpec.name,
-        namespace: namespace,
-        status: 'Pending',
-        listeners: gatewaySpec.listeners || [],
-        createdAt: new Date().toISOString()
-      };
-      return res.status(201).json(gateway);
-    }
-    
-    const gateway = await k8sService.createGateway(gatewaySpec, namespace);
-    res.status(201).json(gateway);
-  } catch (error) {
-    console.error('Error in POST /api/gateways:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put('/api/gateways/:name', validate(gatewaySchema), async (req, res) => {
-  try {
-    const { name } = req.params;
-    const gatewaySpec = req.validatedBody;
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      return res.status(503).json({ error: 'Kubernetes not connected' });
-    }
-    
-    const gateway = await k8sService.updateGateway(name, gatewaySpec, namespace);
-    res.json(gateway);
-  } catch (error) {
-    console.error('Error in PUT /api/gateways:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/gateways/:name', async (req, res) => {
-  try {
-    const { name } = req.params;
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      return res.status(503).json({ error: 'Kubernetes not connected' });
-    }
-    
-    await k8sService.deleteGateway(name, namespace);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error in DELETE /api/gateways:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Route management endpoints
-app.get('/api/routes', async (req, res) => {
-  try {
-    console.log('Fetching routes...');
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      // Fallback to mock data
-      console.log('Kubernetes not connected, returning mock data');
-      const routes = [
-        {
-          id: 'route-1',
-          name: 'example-route',
-          namespace: 'default',
-          parentRefs: [{ name: 'example-gateway', namespace: 'default' }],
-          hostnames: ['example.com'],
-          rules: [
-            {
-              matches: [{ path: { type: 'PathPrefix', value: '/' } }],
-              backendRefs: [{ name: 'example-service', port: 8080 }]
-            }
-          ],
-          status: 'Accepted',
-          createdAt: new Date().toISOString()
-        }
-      ];
-      return res.json({ routes, total: routes.length });
-    }
-    
-    const routes = await k8sService.getHTTPRoutes(namespace);
-    res.json({ routes, total: routes.length });
-  } catch (error) {
-    console.error('Error in /api/routes:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/routes', validate(httpRouteSchema), async (req, res) => {
-  try {
-    const routeSpec = req.validatedBody;
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      // Mock creation if not connected
-      const route = {
-        id: `route-${Date.now()}`,
-        name: routeSpec.name,
-        namespace: namespace,
-        parentRefs: routeSpec.parentRefs || [],
-        hostnames: routeSpec.hostnames || [],
-        rules: routeSpec.rules || [],
-        status: 'Pending',
-        createdAt: new Date().toISOString()
-      };
-      return res.status(201).json(route);
-    }
-    
-    const route = await k8sService.createHTTPRoute(routeSpec, namespace);
-    res.status(201).json(route);
-  } catch (error) {
-    console.error('Error in POST /api/routes:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put('/api/routes/:name', validate(httpRouteSchema), async (req, res) => {
-  try {
-    const { name } = req.params;
-    const routeSpec = req.validatedBody;
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      return res.status(503).json({ error: 'Kubernetes not connected' });
-    }
-    
-    const route = await k8sService.updateHTTPRoute(name, routeSpec, namespace);
-    res.json(route);
-  } catch (error) {
-    console.error('Error in PUT /api/routes:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/routes/:name', async (req, res) => {
-  try {
-    const { name } = req.params;
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      return res.status(503).json({ error: 'Kubernetes not connected' });
-    }
-    
-    await k8sService.deleteHTTPRoute(name, namespace);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error in DELETE /api/routes:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Envoy Gateway deployment
-app.post('/api/envoy-gateway/deploy', async (req, res) => {
-  try {
-    console.log('Deploying Envoy Gateway...');
-    const namespace = req.body.namespace || 'envoy-gateway-system';
-    
-    if (!k8sService.isConnected()) {
-      // Mock deployment if not connected
-      const deployment = {
-        status: 'success',
-        message: 'Envoy Gateway deployment simulated (Kubernetes not connected)',
-        deploymentId: `deploy-${Date.now()}`,
-        components: [
-          { name: 'envoy-gateway-controller', status: 'deployed' },
-          { name: 'envoy-proxy', status: 'deployed' },
-          { name: 'gateway-class', status: 'created' }
-        ]
-      };
-      return res.json(deployment);
-    }
-    
-    const deployment = await k8sService.deployEnvoyGateway(namespace);
-    res.json(deployment);
-  } catch (error) {
-    console.error('Error in /api/envoy-gateway/deploy:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Kubernetes cluster information
-app.get('/api/kubernetes/namespaces', async (req, res) => {
-  try {
-    if (!k8sService.isConnected()) {
-      return res.status(503).json({ error: 'Kubernetes not connected' });
-    }
-    
-    const namespaces = await k8sService.getNamespaces();
-    res.json({ namespaces });
-  } catch (error) {
-    console.error('Error in /api/kubernetes/namespaces:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/kubernetes/services', async (req, res) => {
-  try {
-    const namespace = req.query.namespace || 'default';
-    
-    if (!k8sService.isConnected()) {
-      return res.status(503).json({ error: 'Kubernetes not connected' });
-    }
-    
-    const services = await k8sService.getServices(namespace);
-    res.json({ services });
-  } catch (error) {
-    console.error('Error in /api/kubernetes/services:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Testing endpoint
-app.post('/api/test-route', async (req, res) => {
-  try {
-    const { url, method, headers, body } = req.body;
-    
-    // Real HTTP testing if URL is provided
-    if (url && k8sService.isConnected()) {
-      try {
-        const response = await axios({
-          method: method || 'GET',
-          url: url,
-          headers: headers || {},
-          data: body,
-          timeout: 5000,
-          validateStatus: () => true // Accept any status code
-        });
-        
-        return res.json({
-          success: true,
-          status: response.status,
-          responseTime: Date.now() - Date.now(), // Simple mock for now
-          headers: response.headers,
-          body: response.data
-        });
-      } catch (error) {
-        return res.json({
-          success: false,
-          error: error.message,
-          status: 0,
-          responseTime: 0
-        });
-      }
-    }
-    
-    // Mock route testing
-    const result = {
-      success: true,
-      status: 200,
-      responseTime: Math.floor(Math.random() * 500) + 50,
-      headers: {
-        'content-type': 'application/json',
-        'x-gateway': 'envoy-gateway'
-      },
-      body: { message: 'Test successful', timestamp: new Date().toISOString() }
-    };
-    
-    res.json(result);
-  } catch (error) {
-    console.error('Error in /api/test-route:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Real-time status endpoint for polling
-app.get('/api/realtime-status', (req, res) => {
-  console.log('Real-time status requested');
+// Namespaces API
+app.get('/api/kubernetes/namespaces', (req, res) => {
   res.json({
-    gateways: 1, // Will be updated with real counts in future
-    routes: 1,   // Will be updated with real counts in future
-    status: 'running',
-    kubernetes: k8sService.isConnected(),
-    timestamp: new Date().toISOString(),
-    metrics: {
-      requestCount: Math.floor(Math.random() * 100) + 1200,
-      responseTime: Math.floor(Math.random() * 50) + 40,
-      successRate: (99.5 + Math.random() * 0.4).toFixed(1),
-      activeConnections: Math.floor(Math.random() * 20) + 80
-    }
+    namespaces: mockNamespaces
   });
 });
 
-// Catch-all route to serve frontend for any unmatched routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../ui/index.html'));
-});
-
-// Start HTTP server
-const PORT = process.env.PORT || 8080;
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Envoy Gateway Backend running on port ${PORT}`);
-  console.log(`Server listening on all interfaces (0.0.0.0:${PORT})`);
-  console.log(`Kubernetes connected: ${k8sService.isConnected()}`);
-});
-
-// Simple health endpoint for container health checks
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
-    port: PORT,
-    kubernetes: k8sService.isConnected()
+// Gateways API
+app.get('/api/gateways', (req, res) => {
+  const namespace = req.query.namespace;
+  let filteredGateways = mockGateways;
+  
+  if (namespace && namespace !== '') {
+    filteredGateways = mockGateways.filter(g => g.namespace === namespace);
+  }
+  
+  res.json({
+    gateways: filteredGateways,
+    total: filteredGateways.length
   });
 });
 
-console.log('Envoy Gateway Backend started successfully');
-console.log('Environment:', process.env.NODE_ENV || 'development');
-console.log('Phase 1 Implementation: Kubernetes Integration Active');
+app.get('/api/gateways/all', (req, res) => {
+  res.json({
+    gateways: mockGateways,
+    total: mockGateways.length
+  });
+});
+
+// Routes API  
+app.get('/api/routes', (req, res) => {
+  const namespace = req.query.namespace;
+  let filteredRoutes = mockRoutes;
+  
+  if (namespace && namespace !== '') {
+    filteredRoutes = mockRoutes.filter(r => r.namespace === namespace);
+  }
+  
+  res.json({
+    routes: filteredRoutes,
+    total: filteredRoutes.length
+  });
+});
+
+app.get('/api/routes/all', (req, res) => {
+  res.json({
+    routes: mockRoutes,
+    total: mockRoutes.length
+  });
+});
+
+// Start server
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Envoy Gateway Extension running on port ${port}`);
+  console.log(`UI available at http://localhost:${port}`);
+  console.log(`Serving static files from /app/ui`);
+});
