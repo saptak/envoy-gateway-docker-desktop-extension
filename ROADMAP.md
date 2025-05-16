@@ -9,7 +9,7 @@ This roadmap outlines the development phases for the Envoy Gateway Docker Deskto
 ### Week 1-2: Project Setup and Architecture
 - [x] Project structure and build system
 - [x] Backend API framework (Express.js)
-- [x] Frontend framework setup (React + TypeScript)
+- [x] Frontend framework setup (HTML)
 - [x] Docker extension configuration
 - [x] CI/CD pipeline setup
 
@@ -200,6 +200,6 @@ The project aims to dramatically simplify Gateway API management, making advance
 
 ---
 
-**Last Updated:** [Current Date]  
-**Version:** 1.0  
+**Last Updated:** [Current Date]
+**Version:** 1.0
 **Status:** Active Development

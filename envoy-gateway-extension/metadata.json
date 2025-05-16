@@ -1,15 +1,13 @@
 {
   "icon": "icon.svg",
-  "vm": {
-    "image": "envoy-gateway-extension:latest"
-  },
   "ui": {
     "dashboard-tab": {
       "title": "Envoy Gateway",
+      "root": "/ui",
       "src": "index.html"
     }
   },
-  "host": {
-    "binaries": []
+  "vm": {
+    "compose": "docker-compose.yaml"
   }
 }

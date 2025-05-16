@@ -1,22 +1,11 @@
+version: '3.8'
 services:
-  envoy-gateway-service:
-    image: envoy-gateway-extension:latest
-    ports:
-      - "8080:8080"
-    environment:
-      - PORT=8080
-      - NODE_ENV=production
-      - KUBERNETES_SERVICE_HOST=host.docker.internal
-      - KUBERNETES_SERVICE_PORT=65168
-      - KUBECONFIG=/root/.kube/config
-      # Enable detailed logging for troubleshooting
-      - DEBUG=kubernetes*
+  envoy-gateway-backend:
+    image: ${DESKTOP_PLUGIN_IMAGE}
+    restart: always
     volumes:
-      # Mount kubeconfig to allow access to Kubernetes cluster
-      - ~/.kube/config:/root/.kube/config:ro
-      - ~/.kube:/root/.kube:ro
-    # Add extra hosts for Docker Desktop Kubernetes access
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Use bridge network for compatibility
-    network_mode: bridge
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - SOCKET_PATH=/tmp/backend.sock
+    networks:
+      - default

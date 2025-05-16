@@ -1,6 +1,12 @@
 const express = require('express');
 const path = require('path');
+const http = require('http');
 const app = express();
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+const socketIndex = args.indexOf('--socket');
+const socketPath = socketIndex !== -1 ? args[socketIndex + 1] : null;
 const port = process.env.PORT || 8080;
 
 // Middleware
@@ -64,7 +70,8 @@ app.get('/api/health', (req, res) => {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
-    port: port.toString(),
+    mode: socketPath ? 'docker-desktop-extension' : 'standalone',
+    socket: socketPath || null,
     kubernetes: true
   });
 });
@@ -120,9 +127,45 @@ app.get('/api/routes/all', (req, res) => {
   });
 });
 
-// Start server
-app.listen(port, '0.0.0.0', () => {
-  console.log(`Envoy Gateway Extension running on port ${port}`);
-  console.log(`UI available at http://localhost:${port}`);
-  console.log(`Serving static files from /app/ui`);
+// Create server
+const server = http.createServer(app);
+
+// Start server on socket or port
+if (socketPath) {
+  console.log(`Starting Envoy Gateway Extension in Docker Desktop mode on socket: ${socketPath}`);
+  // Clean up socket file if it exists
+  try {
+    require('fs').unlinkSync(socketPath);
+  } catch (e) {
+    // Ignore if socket doesn't exist
+  }
+  
+  server.listen(socketPath, () => {
+    console.log(`Envoy Gateway Extension backend listening on socket: ${socketPath}`);
+    console.log('Running in Docker Desktop Extension mode');
+  });
+} else {
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`Envoy Gateway Extension running on port ${port}`);
+    console.log(`UI available at http://localhost:${port}`);
+    console.log('Running in standalone mode');
+    console.log(`Serving static files from /app/ui`);
+  });
+}
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully');
+  server.close(() => {
+    console.log('HTTP server closed');
+    if (socketPath) {
+      try {
+        require('fs').unlinkSync(socketPath);
+        console.log('Socket file cleaned up');
+      } catch (e) {
+        console.log('Socket file cleanup error:', e.message);
+      }
+    }
+    process.exit(0);
+  });
 });
