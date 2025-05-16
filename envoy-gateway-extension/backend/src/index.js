@@ -3,15 +3,20 @@ const path = require('path');
 const http = require('http');
 const app = express();
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-const socketIndex = args.indexOf('--socket');
-const socketPath = socketIndex !== -1 ? args[socketIndex + 1] : null;
+// Configure for Docker Desktop extension mode
+const isExtensionMode = !!process.env.DOCKER_DESKTOP_EXTENSION;
 const port = process.env.PORT || 8080;
+
+console.log('Starting Envoy Gateway Extension backend...');
+console.log('Extension mode:', isExtensionMode);
 
 // Middleware
 app.use(express.json());
-app.use(express.static('/app/ui'));
+
+// In extension mode, serve static files for frontend requests
+if (isExtensionMode) {
+  app.use(express.static('/ui'));
+}
 
 // Mock data for demo purposes
 const mockNamespaces = [
@@ -59,20 +64,24 @@ const mockRoutes = [
   }
 ];
 
-// Serve the main UI
-app.get('/', (req, res) => {
-  res.sendFile(path.join('/app/ui', 'index.html'));
-});
-
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
-    mode: socketPath ? 'docker-desktop-extension' : 'standalone',
-    socket: socketPath || null,
-    kubernetes: true
+    mode: isExtensionMode ? 'docker-desktop-extension' : 'standalone',
+    kubernetes: true,
+    connection: 'healthy'
+  });
+});
+
+// Backend status endpoint for UI
+app.get('/api/backend/status', (req, res) => {
+  res.json({
+    status: 'connected',
+    mode: isExtensionMode ? 'extension' : 'standalone',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -88,7 +97,7 @@ app.get('/api/gateways', (req, res) => {
   const namespace = req.query.namespace;
   let filteredGateways = mockGateways;
   
-  if (namespace && namespace !== '') {
+  if (namespace && namespace !== '' && namespace !== 'All Namespaces') {
     filteredGateways = mockGateways.filter(g => g.namespace === namespace);
   }
   
@@ -110,7 +119,7 @@ app.get('/api/routes', (req, res) => {
   const namespace = req.query.namespace;
   let filteredRoutes = mockRoutes;
   
-  if (namespace && namespace !== '') {
+  if (namespace && namespace !== '' && namespace !== 'All Namespaces') {
     filteredRoutes = mockRoutes.filter(r => r.namespace === namespace);
   }
   
@@ -130,42 +139,17 @@ app.get('/api/routes/all', (req, res) => {
 // Create server
 const server = http.createServer(app);
 
-// Start server on socket or port
-if (socketPath) {
-  console.log(`Starting Envoy Gateway Extension in Docker Desktop mode on socket: ${socketPath}`);
-  // Clean up socket file if it exists
-  try {
-    require('fs').unlinkSync(socketPath);
-  } catch (e) {
-    // Ignore if socket doesn't exist
-  }
-  
-  server.listen(socketPath, () => {
-    console.log(`Envoy Gateway Extension backend listening on socket: ${socketPath}`);
-    console.log('Running in Docker Desktop Extension mode');
-  });
-} else {
-  server.listen(port, '0.0.0.0', () => {
-    console.log(`Envoy Gateway Extension running on port ${port}`);
-    console.log(`UI available at http://localhost:${port}`);
-    console.log('Running in standalone mode');
-    console.log(`Serving static files from /app/ui`);
-  });
-}
+// Start server
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Envoy Gateway Extension backend running on port ${port}`);
+  console.log('Backend is healthy and ready to serve requests');
+});
 
 // Handle graceful shutdown
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully');
   server.close(() => {
     console.log('HTTP server closed');
-    if (socketPath) {
-      try {
-        require('fs').unlinkSync(socketPath);
-        console.log('Socket file cleaned up');
-      } catch (e) {
-        console.log('Socket file cleanup error:', e.message);
-      }
-    }
     process.exit(0);
   });
 });

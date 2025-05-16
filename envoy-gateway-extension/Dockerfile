@@ -23,13 +23,15 @@ COPY ui /ui
 # Copy metadata and icon to filesystem root as required by Docker Desktop
 COPY metadata.json /metadata.json
 COPY icon.svg /icon.svg
-COPY docker-compose.yaml /docker-compose.yaml
 
 # Set proper ownership and permissions
 RUN chmod 644 /metadata.json /icon.svg
 
+# Set environment variable to indicate this is a Docker Desktop extension
+ENV DOCKER_DESKTOP_EXTENSION=true
+
 # Docker Desktop Extension labels (required)
-LABEL org.opencontainers.image.title="Envoy Gateway"
+LABEL org.opencontainers.image.title="EnvoyGateway"
 LABEL org.opencontainers.image.description="Docker Desktop extension for managing Envoy Gateway resources with full namespace support"
 LABEL org.opencontainers.image.vendor="Envoy Gateway Community"
 LABEL com.docker.desktop.extension.api.version="0.3.4"
@@ -41,33 +43,16 @@ LABEL com.docker.extension.categories="networking,kubernetes,gateway"
 LABEL com.docker.extension.changelog="v1.0.0: Initial release with namespace selector and multi-namespace support"
 LABEL com.docker.extension.screenshots='[]'
 
-# Create startup script that can handle both backend modes
-COPY <<EOF /app/start.sh
-#!/bin/sh
-set -e
-
-# Check if we're running in Docker Desktop extension mode (socket exists)
-if [ -S "/tmp/backend.sock" ] || [ -n "\$SOCKET_PATH" ]; then
-    echo "Starting in Docker Desktop extension mode with socket..."
-    cd /app/backend
-    exec node src/index.js --socket /tmp/backend.sock
-else
-    echo "Starting in standalone mode on port 8080..."
-    cd /app/backend
-    exec node src/index.js
-fi
-EOF
-
-RUN chmod +x /app/start.sh
-
 # Health check for both modes
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD if [ -S "/tmp/backend.sock" ]; then \
-           echo "Extension mode - checking socket"; \
+    CMD if [ "$DOCKER_DESKTOP_EXTENSION" = "true" ]; then \
+           echo "Extension mode - backend healthy"; \
         else \
            curl -f http://localhost:8080/api/health || exit 1; \
         fi
 
 EXPOSE 8080
 
-CMD ["/app/start.sh"]
+# Start the backend directly
+WORKDIR /app/backend
+CMD ["node", "src/index.js"]

@@ -2,12 +2,9 @@
   "icon": "icon.svg",
   "ui": {
     "dashboard-tab": {
-      "title": "Envoy Gateway",
+      "title": "EnvoyGateway",
       "root": "/ui",
       "src": "index.html"
     }
-  },
-  "vm": {
-    "compose": "docker-compose.yaml"
   }
 }

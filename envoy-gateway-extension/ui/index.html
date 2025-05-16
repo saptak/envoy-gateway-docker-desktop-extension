@@ -356,16 +356,25 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .demo-badge {
+            background: #ff6b6b;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+        }
     </style>
 </head>
 <body>
     <div id="connectionStatus" class="connection-status">
-        ● Connected
+        ● Running (Demo Mode)
     </div>
 
     <div class="container">
         <header class="header">
-            <h1>Envoy Gateway</h1>
+            <h1>Envoy Gateway <span class="demo-badge">Demo Mode</span></h1>
             <p>Docker Desktop Extension for API Gateway Management with Namespace Support</p>
         </header>
 
@@ -375,7 +384,11 @@
                 🌐 Select Namespace
             </label>
             <select id="namespaceSelect" class="namespace-selector">
-                <option value="">Loading namespaces...</option>
+                <option value="">All Namespaces</option>
+                <option value="default">default</option>
+                <option value="envoy-gateway-system">envoy-gateway-system</option>
+                <option value="kube-system">kube-system</option>
+                <option value="kube-public">kube-public</option>
             </select>
             <div class="namespace-info">
                 Showing resources in: <span id="currentNamespace" class="current-namespace">All Namespaces</span>
@@ -386,13 +399,13 @@
             <div class="status-item">
                 <div class="status-label">Backend Status</div>
                 <div class="status-value" id="backendStatus">
-                    Connected <span class="status-indicator"></span>
+                    Demo Mode <span class="status-indicator"></span>
                 </div>
             </div>
             <div class="status-item">
                 <div class="status-label">Kubernetes</div>
                 <div class="status-value" id="kubernetesStatus">
-                    Checking... <span class="status-indicator warning"></span>
+                    Demo Mode <span class="status-indicator"></span>
                 </div>
             </div>
             <div class="status-item">
@@ -401,11 +414,11 @@
             </div>
             <div class="status-item">
                 <div class="status-label">Gateways</div>
-                <div class="status-value" id="gatewayCount">0</div>
+                <div class="status-value" id="gatewayCount">2</div>
             </div>
             <div class="status-item">
                 <div class="status-label">Routes</div>
-                <div class="status-value" id="routeCount">0</div>
+                <div class="status-value" id="routeCount">2</div>
             </div>
         </div>
 
@@ -433,6 +446,7 @@
                 
                 <div class="action-buttons">
                     <button class="btn btn-primary" onclick="refreshData()">
+                        <span class="spinner" id="refreshSpinner" style="display: none;"></span>
                         Refresh Data
                     </button>
                     <button class="btn btn-success" onclick="showGateways()">
@@ -492,73 +506,111 @@
 
     <script>
         let currentNamespace = '';
-        let allNamespaces = [];
-        let gateways = [];
-        let routes = [];
+        let dockerDesktopClient = null;
 
-        // Get the base URL for API calls
-        function getBaseUrl() {
-            return 'http://localhost:8080';
-        }
+        // Mock data for demonstration
+        const mockGateways = [
+            { 
+                name: 'api-gateway', 
+                namespace: 'default', 
+                status: 'Ready',
+                gatewayClassName: 'envoy-gateway',
+                listeners: [{ name: 'http', port: 80, protocol: 'HTTP' }],
+                createdAt: new Date('2023-01-05')
+            },
+            {
+                name: 'admin-gateway',
+                namespace: 'envoy-gateway-system',
+                status: 'Ready',
+                gatewayClassName: 'envoy-gateway',
+                listeners: [{ name: 'https', port: 443, protocol: 'HTTPS' }],
+                createdAt: new Date('2023-01-06')
+            }
+        ];
+
+        const mockRoutes = [
+            {
+                name: 'api-route',
+                namespace: 'default', 
+                status: 'Accepted',
+                hostnames: ['api.example.com'],
+                rules: [{ path: '/api/*' }],
+                createdAt: new Date('2023-01-07')
+            },
+            {
+                name: 'admin-route',
+                namespace: 'envoy-gateway-system',
+                status: 'Accepted', 
+                hostnames: ['admin.example.com'],
+                rules: [{ path: '/admin/*' }],
+                createdAt: new Date('2023-01-08')
+            }
+        ];
+
+        let gateways = [...mockGateways];
+        let routes = [...mockRoutes];
 
         // Initialize the application
         async function init() {
-            addLog('Initializing Envoy Gateway Extension with namespace support...', 'info');
+            console.log('Initializing Envoy Gateway Extension in demo mode...');
             updateConnectionStatus(true);
             
-            // Load initial data
-            await Promise.all([
-                loadNamespaces(),
-                checkHealth(),
-                loadGateways(),
-                loadRoutes()
-            ]);
-            
-            addLog('Namespace selector implementation complete!', 'success');
-        }
-
-        // Load namespaces
-        async function loadNamespaces() {
+            // Try to initialize Docker Desktop client (for real environment)
             try {
-                // Use the correct API endpoint
-                const response = await fetch(getBaseUrl() + '/api/kubernetes/namespaces');
-                if (response.ok) {
-                    const data = await response.json();
-                    allNamespaces = data.namespaces || [];
-                    populateNamespaceSelector();
-                    addLog(`Loaded ${allNamespaces.length} namespaces`, 'info');
-                } else {
-                    throw new Error('Failed to load namespaces');
+                if (window.ddClient) {
+                    dockerDesktopClient = window.ddClient;
+                    console.log('Docker Desktop client available');
                 }
             } catch (error) {
-                addLog('Error loading namespaces: ' + error.message, 'error');
-                // Fall back to default namespace
-                allNamespaces = [{ name: 'default', status: 'Active' }];
-                populateNamespaceSelector();
+                console.log('Running in demo mode (Docker Desktop client not available)');
             }
+            
+            // Load initial data
+            setTimeout(() => {
+                loadGateways();
+                loadRoutes();
+                console.log('Namespace selector implementation complete!');
+            }, 500);
         }
 
-        // Populate namespace selector dropdown
-        function populateNamespaceSelector() {
-            const select = document.getElementById('namespaceSelect');
-            select.innerHTML = '';
+        // Load gateways for current namespace
+        function loadGateways() {
+            const spinner = document.getElementById('gatewaySpinner');
+            spinner.style.display = 'inline-block';
             
-            // Add "All Namespaces" option
-            const allOption = document.createElement('option');
-            allOption.value = '';
-            allOption.textContent = 'All Namespaces';
-            select.appendChild(allOption);
+            setTimeout(() => {
+                let filteredGateways = [...mockGateways];
+                
+                if (currentNamespace && currentNamespace !== 'All Namespaces') {
+                    filteredGateways = mockGateways.filter(g => g.namespace === currentNamespace);
+                }
+                
+                gateways = filteredGateways;
+                document.getElementById('gatewayCount').textContent = gateways.length;
+                displayGateways();
+                console.log(`Loaded ${gateways.length} gateways`);
+                spinner.style.display = 'none';
+            }, 300);
+        }
+
+        // Load routes for current namespace
+        function loadRoutes() {
+            const spinner = document.getElementById('routeSpinner');
+            spinner.style.display = 'inline-block';
             
-            // Add individual namespaces
-            allNamespaces.forEach(ns => {
-                const option = document.createElement('option');
-                option.value = ns.name;
-                option.textContent = `${ns.name}`;
-                select.appendChild(option);
-            });
-            
-            // Set current selection
-            select.value = currentNamespace;
+            setTimeout(() => {
+                let filteredRoutes = [...mockRoutes];
+                
+                if (currentNamespace && currentNamespace !== 'All Namespaces') {
+                    filteredRoutes = mockRoutes.filter(r => r.namespace === currentNamespace);
+                }
+                
+                routes = filteredRoutes;
+                document.getElementById('routeCount').textContent = routes.length;
+                displayRoutes();
+                console.log(`Loaded ${routes.length} routes`);
+                spinner.style.display = 'none';
+            }, 300);
         }
 
         // Handle namespace change
@@ -569,7 +621,7 @@
             const currentNs = document.getElementById('currentNamespace');
             const selectedNs = document.getElementById('selectedNamespace');
             
-            if (currentNamespace) {
+            if (currentNamespace && currentNamespace !== '') {
                 currentNs.textContent = currentNamespace;
                 selectedNs.textContent = currentNamespace;
             } else {
@@ -579,90 +631,7 @@
             
             // Refresh data for selected namespace
             refreshData();
-            addLog(`Switched to namespace: ${currentNamespace || 'All Namespaces'}`, 'info');
-        }
-
-        // Check system health
-        async function checkHealth() {
-            try {
-                const response = await fetch(getBaseUrl() + '/api/health');
-                if (response.ok) {
-                    const health = await response.json();
-                    updateKubernetesStatus(health.kubernetes);
-                    updateConnectionStatus(true);
-                } else {
-                    updateConnectionStatus(false);
-                }
-            } catch (error) {
-                addLog('Health check failed: ' + error.message, 'warning');
-                updateConnectionStatus(false);
-            }
-        }
-
-        // Load gateways for current namespace
-        async function loadGateways() {
-            const spinner = document.getElementById('gatewaySpinner');
-            spinner.style.display = 'inline-block';
-            
-            try {
-                let url = getBaseUrl() + '/api/gateways';
-                if (currentNamespace) {
-                    url += `?namespace=${currentNamespace}`;
-                } else {
-                    // Use the all endpoint for cross-namespace queries
-                    url = getBaseUrl() + '/api/gateways/all';
-                }
-                
-                const response = await fetch(url);
-                if (response.ok) {
-                    const data = await response.json();
-                    gateways = data.gateways || [];
-                    document.getElementById('gatewayCount').textContent = gateways.length;
-                    displayGateways();
-                    addLog(`Loaded ${gateways.length} gateways`, 'info');
-                } else {
-                    throw new Error('Failed to load gateways');
-                }
-            } catch (error) {
-                addLog('Error loading gateways: ' + error.message, 'error');
-                gateways = [];
-                displayGateways();
-            } finally {
-                spinner.style.display = 'none';
-            }
-        }
-
-        // Load routes for current namespace
-        async function loadRoutes() {
-            const spinner = document.getElementById('routeSpinner');
-            spinner.style.display = 'inline-block';
-            
-            try {
-                let url = getBaseUrl() + '/api/routes';
-                if (currentNamespace) {
-                    url += `?namespace=${currentNamespace}`;
-                } else {
-                    // Use the all endpoint for cross-namespace queries
-                    url = getBaseUrl() + '/api/routes/all';
-                }
-                
-                const response = await fetch(url);
-                if (response.ok) {
-                    const data = await response.json();
-                    routes = data.routes || [];
-                    document.getElementById('routeCount').textContent = routes.length;
-                    displayRoutes();
-                    addLog(`Loaded ${routes.length} routes`, 'info');
-                } else {
-                    throw new Error('Failed to load routes');
-                }
-            } catch (error) {
-                addLog('Error loading routes: ' + error.message, 'error');
-                routes = [];
-                displayRoutes();
-            } finally {
-                spinner.style.display = 'none';
-            }
+            console.log(`Switched to namespace: ${currentNamespace || 'All Namespaces'}`);
         }
 
         // Display gateways
@@ -747,39 +716,24 @@
         // Update connection status
         function updateConnectionStatus(connected) {
             const statusEl = document.getElementById('connectionStatus');
-            const backendStatusEl = document.getElementById('backendStatus');
             
-            if (connected) {
-                statusEl.textContent = '● Connected';
-                statusEl.className = 'connection-status';
-                backendStatusEl.innerHTML = 'Connected <span class="status-indicator"></span>';
-            } else {
-                statusEl.textContent = '● Disconnected';
-                statusEl.className = 'connection-status disconnected';
-                backendStatusEl.innerHTML = 'Disconnected <span class="status-indicator error"></span>';
-            }
-        }
-
-        // Update Kubernetes status
-        function updateKubernetesStatus(connected) {
-            const statusEl = document.getElementById('kubernetesStatus');
-            
-            if (connected === true) {
-                statusEl.innerHTML = 'Connected <span class="status-indicator"></span>';
-            } else if (connected === false) {
-                statusEl.innerHTML = 'Disconnected <span class="status-indicator error"></span>';
-            } else {
-                statusEl.innerHTML = 'Checking... <span class="status-indicator warning"></span>';
-            }
+            statusEl.textContent = '● Running (Demo Mode)';
+            statusEl.className = 'connection-status';
         }
 
         // Refresh all data
         async function refreshData() {
+            const refreshSpinner = document.getElementById('refreshSpinner');
+            refreshSpinner.style.display = 'inline-block';
+            
             await Promise.all([
-                loadNamespaces(),
                 loadGateways(),
                 loadRoutes()
             ]);
+            
+            setTimeout(() => {
+                refreshSpinner.style.display = 'none';
+            }, 500);
         }
 
         // Show gateways
@@ -795,7 +749,7 @@
         // Toggle namespace view
         function toggleNamespaceView() {
             const select = document.getElementById('namespaceSelect');
-            if (select.value === '') {
+            if (select.value === '' || select.value === 'All Namespaces') {
                 // Switch to default namespace
                 select.value = 'default';
             } else {
@@ -805,19 +759,11 @@
             onNamespaceChange();
         }
 
-        // Add log function (simplified)
-        function addLog(message, type = 'info') {
-            console.log(`[${type.toUpperCase()}] ${message}`);
-        }
-
         // Setup event listeners
         document.getElementById('namespaceSelect').addEventListener('change', onNamespaceChange);
 
         // Initialize when page loads
         window.addEventListener('load', init);
-
-        // Auto-refresh every 30 seconds
-        setInterval(refreshData, 30000);
     </script>
 </body>
 </html>
