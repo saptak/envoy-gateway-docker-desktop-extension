@@ -1,6 +1,6 @@
 # Envoy Gateway Docker Desktop Extension with Namespace Selector
 
-A Docker Desktop extension for managing Envoy Gateway resources with **complete namespace support** including cross-namespace functionality.
+A clean, minimal Docker Desktop extension for managing Envoy Gateway resources with **complete namespace support** including cross-namespace functionality.
 
 ## ✨ Features
 
@@ -64,71 +64,80 @@ docker run -d -p 8080:8080 \
 ### Option 3: Build from Source
 ```bash
 # Build the extension
-docker build -t envoy-gateway-extension:latest ./envoy-gateway-extension
+cd envoy-gateway-extension
+docker build -t envoy-gateway-extension:latest .
 
 # Run the container
 docker run -d -p 8080:8080 envoy-gateway-extension:latest
 ```
 
-## 🏗️ **Architecture**
+## 🏗️ **Clean Architecture**
 
-### Frontend
-- **HTML/CSS/JavaScript** UI with namespace selector
-- **Dynamic dropdown** populated from backend APIs
-- **Real-time polling** for resource updates
-- **Responsive design** for different screen sizes
+This project has been **refactored to remove all redundant code** while maintaining full functionality:
 
-### Backend
-- **Node.js/Express** server with RESTful APIs
-- **Kubernetes integration** for namespace discovery
-- **Health checks** and error handling
-- **CORS support** for development
+### Project Structure
+```
+envoy-gateway-docker-desktop-extension/
+├── envoy-gateway-extension/          # Complete working extension
+│   ├── backend/                      # Node.js backend
+│   │   ├── package.json             # Dependencies
+│   │   └── src/index.js             # Main backend with namespace APIs
+│   ├── ui/                          # HTML frontend
+│   │   └── index.html               # UI with namespace selector
+│   ├── Dockerfile                    # Container image
+│   ├── metadata.json                 # Extension metadata
+│   └── icon.svg                      # Extension icon
+├── docker-compose.yml               # Quick start configuration
+├── README.md                         # This file
+└── .gitignore                        # Git ignore rules
+```
 
-### APIs
+### Key Implementation
+- **Frontend**: `envoy-gateway-extension/ui/index.html` - Complete HTML UI with namespace selector
+- **Backend**: `envoy-gateway-extension/backend/src/index.js` - Node.js server with namespace APIs
+- **Container**: `envoy-gateway-extension/Dockerfile` - Containerized extension
+
+## 🔧 **APIs**
+
 - `/api/health` - System health check
 - `/api/kubernetes/namespaces` - Get all namespaces
 - `/api/gateways` - Gateway resources (with namespace filtering)
 - `/api/routes` - Route resources (with namespace filtering)
 
-## 🔧 **Development**
-
-### Project Structure
-```
-envoy-gateway-docker-desktop-extension/
-├── envoy-gateway-extension/          # Ready-to-run extension
-│   ├── backend/                      # Node.js backend
-│   ├── ui/                          # HTML frontend with namespace selector
-│   ├── Dockerfile                    # Container image
-│   └── metadata.json                 # Extension metadata
-├── src/                              # Development source
-│   ├── frontend/                     # React frontend (alternative)
-│   └── backend/                      # TypeScript backend (development)
-└── docker-compose.yml               # Quick start configuration
-```
-
-### Key Implementation Files
-- **UI with Namespace Selector**: `envoy-gateway-extension/ui/index.html`
-- **Backend with Namespace APIs**: `envoy-gateway-extension/backend/src/index.js`
-- **React Namespace Component**: `src/frontend/src/components/common/NamespaceSelector/`
-- **Namespace Redux Store**: `src/frontend/src/store/slices/namespaceSlice.ts`
-
-## 🎯 **Task Achievement**
+## 🎯 **Features Implemented**
 
 ✅ **All requirements successfully implemented:**
 - [x] Namespace selector on main page
 - [x] Cross-namespace functionality
 - [x] Real-time resource filtering
 - [x] Excellent developer experience
-- [x] Frictionless namespace management
+- [x] Clean, maintainable codebase
+- [x] No redundant code
 
-## 📝 **Version History**
+## 📝 **Code Quality**
+
+### ✨ **Refactored & Clean**
+- **Removed** all unused React/TypeScript development code
+- **Removed** redundant build scripts and configurations  
+- **Removed** backup directories and test files
+- **Kept** only the working extension code
+- **Maintained** full functionality with minimal footprint
+
+### 🎯 **Benefits**
+- **Smaller repository size** - easier to clone and maintain
+- **Clear structure** - easy to understand and modify
+- **No confusion** - only working code is present
+- **Faster builds** - no unused dependencies
+- **Clean git history** - focused on the working solution
+
+## 🚀 **Version History**
 
 ### v1.0.0-namespace-selector
 - ✨ Complete namespace selector implementation
 - 🔄 Cross-namespace resource filtering
 - 📊 Real-time status updates
 - 🎨 Enhanced UI with namespace management
-- 🚀 Working Docker Desktop extension
+- 🧹 **Cleaned up all redundant code**
 
 ## 🤝 **Contributing**
 
@@ -150,4 +159,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**🎉 The namespace selector implementation provides a frictionless developer experience for managing Envoy Gateway resources across multiple Kubernetes namespaces!**
+**🎉 A clean, focused implementation providing a frictionless developer experience for managing Envoy Gateway resources across multiple Kubernetes namespaces!**
