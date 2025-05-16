@@ -1,33 +1,27 @@
+version: '3.8'
+
 services:
-  envoy-gateway-extension:
-    build: .
-    image: envoy-gateway-extension:latest
-    container_name: envoy-gateway-extension
+  envoy-gateway-service:
+    build:
+      context: ./envoy-gateway-extension
+      dockerfile: Dockerfile
     ports:
-      - "8080:8080"  # Main application port
+      - "8080:8080"
     environment:
-      - NODE_ENV=production
       - PORT=8080
-      - KUBE_CONFIG_PATH=/app/.kube/config
-      - KUBERNETES_SERVICE_HOST=host.docker.internal
-      - KUBERNETES_SERVICE_PORT=65168
-      # Enable detailed logging for troubleshooting
-      - DEBUG=kubernetes*
+      - NODE_ENV=production
+      - DD_EXTENSION=false
     volumes:
-      - ~/.kube/config:/app/.kube/config:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ~/.kube/config:/root/.kube/config:ro
+    networks:
+      - envoy-gateway-network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    restart: unless-stopped
-    networks:
-      - envoy-gateway-network
-    # Add extra hosts to resolve Docker Desktop Kubernetes
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
 networks:
   envoy-gateway-network:

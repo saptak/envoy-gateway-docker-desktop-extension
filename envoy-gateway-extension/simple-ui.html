@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envoy Gateway Extension</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status.connected {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status.disconnected {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .card {
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .button {
+            background: #1976d2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .button:hover {
+            background: #1565c0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Envoy Gateway Extension</h1>
+            <p>Docker Desktop Extension for managing Envoy Gateway resources</p>
+            <span class="status disconnected" id="status">Connecting...</span>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3>Quick Setup</h3>
+                <p>Deploy Envoy Gateway to your Docker Desktop Kubernetes cluster.</p>
+                <button class="button" onclick="deployEnvoyGateway()">Deploy Envoy Gateway</button>
+            </div>
+
+            <div class="card">
+                <h3>Gateways</h3>
+                <p id="gateway-count">Loading...</p>
+                <button class="button" onclick="loadGateways()">Refresh Gateways</button>
+            </div>
+
+            <div class="card">
+                <h3>Routes</h3>
+                <p id="route-count">Loading...</p>
+                <button class="button" onclick="loadRoutes()">Refresh Routes</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Activity Log</h3>
+            <div id="log" style="font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
+                <div>Extension loaded successfully</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple extension test
+        let backendAvailable = false;
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div>${time}: ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            if (connected) {
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status connected';
+            } else {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+            }
+        }
+
+        async function checkBackend() {
+            try {
+                log('Checking backend connection...');
+                
+                // Try to fetch from the backend API
+                const response = await fetch('/api/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`Backend connected: ${data.status}`);
+                    updateStatus(true);
+                    backendAvailable = true;
+                    return true;
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                log(`Backend connection failed: ${error.message}`);
+                updateStatus(false);
+                backendAvailable = false;
+                return false;
+            }
+        }
+
+        async function deployEnvoyGateway() {
+            if (!backendAvailable) {
+                log('Backend not available. Cannot deploy Envoy Gateway.');
+                return;
+            }
+
+            try {
+                log('Deploying Envoy Gateway...');
+                const response = await fetch('/api/quick-setup/install', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('Envoy Gateway deployed successfully!');
+                } else {
+                    log(`Deployment failed: ${data.message}`);
+                }
+            } catch (error) {
+                log(`Deployment error: ${error.message}`);
+            }
+        }
+
+        async function loadGateways() {
+            if (!backendAvailable) {
+                document.getElementById('gateway-count').textContent = 'Backend not available';
+                return;
+            }
+
+            try {
+                log('Loading gateways...');
+                const response = await fetch('/api/gateways');
+                const data = await response.json();
+                
+                document.getElementById('gateway-count').textContent = 
+                    `Found ${data.total || 0} gateways`;
+                log(`Loaded ${data.total || 0} gateways`);
+            } catch (error) {
+                log(`Failed to load gateways: ${error.message}`);
+                document.getElementById('gateway-count').textContent = 'Failed to load';
+            }
+        }
+
+        async function loadRoutes() {
+            if (!backendAvailable) {
+                document.getElementById('route-count').textContent = 'Backend not available';
+                return;
+            }
+
+            try {
+                log('Loading routes...');
+                const response = await fetch('/api/routes');
+                const data = await response.json();
+                
+                document.getElementById('route-count').textContent = 
+                    `Found ${data.total || 0} routes`;
+                log(`Loaded ${data.total || 0} routes`);
+            } catch (error) {
+                log(`Failed to load routes: ${error.message}`);
+                document.getElementById('route-count').textContent = 'Failed to load';
+            }
+        }
+
+        // Initialize the extension
+        async function init() {
+            log('Initializing Envoy Gateway Extension...');
+            
+            // Check backend connection
+            await checkBackend();
+            
+            // Load initial data if backend is available
+            if (backendAvailable) {
+                await loadGateways();
+                await loadRoutes();
+            }
+
+            // Set up periodic health checks
+            setInterval(checkBackend, 30000);
+        }
+
+        // Start initialization when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

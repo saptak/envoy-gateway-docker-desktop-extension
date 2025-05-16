@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1
+
+# Simple static file extension for testing
+FROM nginx:alpine
+
+# Docker Desktop Extension required labels
+LABEL org.opencontainers.image.title="EnvoyGateway" \
+      org.opencontainers.image.description="Docker Desktop extension for managing Envoy Gateway resources" \
+      org.opencontainers.image.vendor="Envoy Gateway Community" \
+      org.opencontainers.image.version="1.0.0" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      com.docker.desktop.extension.api.version=">= 0.3.4"
+
+# Copy UI files
+COPY simple-ui.html /usr/share/nginx/html/index.html
+COPY metadata.json icon.svg /
+
+# Configure nginx for extension
+RUN echo 'server { listen 80; location / { root /usr/share/nginx/html; index index.html; } }' > /etc/nginx/conf.d/default.conf
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

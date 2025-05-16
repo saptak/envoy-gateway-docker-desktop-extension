@@ -3,7 +3,7 @@
   "ui": {
     "dashboard-tab": {
       "title": "EnvoyGateway",
-      "root": "/ui"
+      "root": "/usr/share/nginx/html"
     }
   }
 }
