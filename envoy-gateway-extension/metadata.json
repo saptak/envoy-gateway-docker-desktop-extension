@@ -2,7 +2,12 @@
   "icon": "icon.svg",
   "vm": {
     "image": "${DESKTOP_PLUGIN_IMAGE}",
-    "port": 8080
+    "exposes": {
+      "socket": {
+        "path": "/run/guest-services/extension-envoy-gateway-extension.sock",
+        "readOnly": false
+      }
+    }
   },
   "ui": {
     "dashboard-tab": {

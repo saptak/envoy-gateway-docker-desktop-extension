@@ -70,8 +70,7 @@ COPY --chown=app:nodejs metadata.json icon.svg simple-ui.html /
 
 # Set environment variables
 ENV NODE_ENV=production \
-    DD_EXTENSION=true \
-    PORT=8080
+    DD_EXTENSION=true
 
 # Switch to non-root user
 USER app

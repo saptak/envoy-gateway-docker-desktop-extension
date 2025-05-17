@@ -80,7 +80,6 @@ const mockRoutes: Route[] = [
 class EnvoyGatewayBackend {
   private app: express.Application;
   private server: http.Server;
-  private socketPath: string;
   private kubernetesClient: k8s.KubeConfig | null = null;
   private k8sApi: k8s.CoreV1Api | null = null;
   private customApi: k8s.CustomObjectsApi | null = null;
@@ -89,7 +88,6 @@ class EnvoyGatewayBackend {
 
   constructor() {
     this.app = express();
-    this.socketPath = process.env.SOCKET_PATH || '/tmp/backend.sock';
     this.kubernetesConfig = {
       enabled: false,
       connected: false,
@@ -108,54 +106,88 @@ class EnvoyGatewayBackend {
   }
 
   private async initializeKubernetes(): Promise<void> {
+    console.log('INITIALIZE KUBERNETES - MARKER_V5'); // This marker should be from the version that was actually running
     try {
       console.log('Initializing Kubernetes client...');
       this.kubernetesClient = new k8s.KubeConfig();
       
-      // For Docker Desktop extensions, try default config first
-      try {
-        this.kubernetesClient.loadFromDefault();
-        console.log('Loaded Kubernetes config from default');
-      } catch (defaultError) {
-        // Fallback to cluster config only if default fails
-        console.log('Default config failed, trying cluster config...');
-        try {
-          this.kubernetesClient.loadFromCluster();
-          console.log('Loaded Kubernetes config from cluster');
-        } catch (clusterError) {
-          console.log('Both default and cluster config failed, running in demo mode');
-          this.kubernetesConfig = {
-            enabled: false,
-            connected: false,
-            contextName: '',
-            error: 'No Kubernetes configuration available'
+      const kubeconfigEnvPath = process.env.KUBECONFIG;
+      console.log(`KUBECONFIG environment variable: ${kubeconfigEnvPath || 'not set'}`);
+      
+      console.log('Attempting to load Kubernetes config using loadFromDefault()...');
+      this.kubernetesClient.loadFromDefault(); 
+      console.log('Kubernetes config loaded via loadFromDefault().');
+
+      const currentContextName = this.kubernetesClient.getCurrentContext();
+      console.log(`Current K8s context from KubeConfig object: ${currentContextName}`);
+
+      const currentCluster = this.kubernetesClient.getCurrentCluster();
+      let finalServerUrl: string | undefined;
+
+      if (currentCluster) {
+        let serverUrl = currentCluster.server;
+        console.log(`Original K8s cluster server URL from KubeConfig object: ${serverUrl}`);
+        
+        const localhostPattern = /\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?/;
+        if (localhostPattern.test(serverUrl)) {
+          finalServerUrl = serverUrl.replace(localhostPattern, `//host.docker.internal$2`);
+          console.log(`Modified K8s cluster server URL for container: ${finalServerUrl}`);
+        } else {
+          finalServerUrl = serverUrl;
+        }
+      } else {
+        console.log('Could not get current cluster from KubeConfig object (after loadFromDefault).');
+        throw new Error('Failed to get current Kubernetes cluster from KubeConfig.');
+      }
+
+      if (!finalServerUrl) {
+        throw new Error('Kubernetes server URL could not be determined.');
+      }
+
+      // If using host.docker.internal, find the cluster in KubeConfig and replace it
+      // with a new configuration that has skipTLSVerify: true and the updated server URL.
+      if (this.kubernetesClient && finalServerUrl.includes('//host.docker.internal')) {
+        const clusterIndex = this.kubernetesClient.clusters.findIndex(c => c.name === currentContextName);
+        if (clusterIndex !== -1) {
+          const originalCluster = this.kubernetesClient.clusters[clusterIndex];
+          console.log(`MARKER_V7: Modifying cluster config for '${originalCluster.name}' to use server '${finalServerUrl}' and skipTLSVerify=true.`);
+          this.kubernetesClient.clusters[clusterIndex] = {
+            name: originalCluster.name,
+            server: finalServerUrl, 
+            skipTLSVerify: true,    
+            caData: originalCluster.caData, 
           };
-          return;
+        } else {
+          console.warn(`MARKER_V7: Could not find cluster '${currentContextName}' in KubeConfig clusters list to update for skipTLSVerify.`);
         }
       }
+
+      this.k8sApi = new k8s.CoreV1Api(finalServerUrl);
+      this.k8sApi.setDefaultAuthentication(this.kubernetesClient!); 
+
+      this.customApi = new k8s.CustomObjectsApi(finalServerUrl);
+      this.customApi.setDefaultAuthentication(this.kubernetesClient!);
       
-      // Initialize APIs
-      this.k8sApi = this.kubernetesClient.makeApiClient(k8s.CoreV1Api);
-      this.customApi = this.kubernetesClient.makeApiClient(k8s.CustomObjectsApi);
-      
-      // Test connection with retry
-      await withRetry(() => this.testKubernetesConnection(), this.retryConfig);
-      
+      console.log('Attempting Kubernetes connection test...');
+      await this.testKubernetesConnection();
+
       this.kubernetesConfig = {
         enabled: true,
         connected: true,
-        contextName: this.kubernetesClient.getCurrentContext()
+        contextName: this.kubernetesClient.getCurrentContext(),
       };
-      
-      console.log('Kubernetes client initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize Kubernetes client:', error);
+      console.log(`Successfully connected to Kubernetes context: ${this.kubernetesConfig.contextName}`);
+
+    } catch (error: any) {
+      console.error('Failed to initialize Kubernetes client (outer catch):', error);
       this.kubernetesConfig = {
-        enabled: false,
+        enabled: true, 
         connected: false,
-        contextName: '',
-        error: error instanceof Error ? error.message : 'Unknown error'
+        contextName: 'N/A (Error)',
+        error: error.message || 'Unknown Kubernetes initialization error',
       };
+      this.k8sApi = null; 
+      this.customApi = null;
     }
   }
 
@@ -171,6 +203,8 @@ class EnvoyGatewayBackend {
     }
   }
 
+  // ... (rest of the file is identical to the final_file_content from 5:08 PM) ...
+  // (Make sure to include the ENTIRE rest of the file here, unchanged)
   private setupMiddleware(): void {
     // Add request ID middleware first
     this.app.use(requestIdMiddleware);
@@ -187,11 +221,11 @@ class EnvoyGatewayBackend {
 
   private setupRoutes(): void {
     // Serve static files from the UI directory
-    this.app.use(express.static('/ui'));
+    this.app.use(express.static('/ui-new'));
     
     // Serve index.html for the root path
     this.app.get('/', (req, res) => {
-      res.sendFile('/ui/index.html');
+      res.sendFile('/ui-new/index.html');
     });
 
     // Health check endpoint
@@ -742,32 +776,33 @@ class EnvoyGatewayBackend {
   }
 
   public start(): void {
-    const port = parseInt(process.env.PORT || '8080', 10);
     const isDockerDesktopExtension = process.env.DD_EXTENSION === 'true';
+    const socketPath = process.env.SOCKET_PATH || '/run/guest-services/extension-envoy-gateway-extension.sock';
+    const port = parseInt(process.env.PORT || '8080', 10);
     
     if (isDockerDesktopExtension) {
-      // Docker Desktop Extension mode - use Unix socket
-      // Remove existing socket if it exists
-      if (fs.existsSync(this.socketPath)) {
-        console.log('Removing existing socket:', this.socketPath);
-        fs.unlinkSync(this.socketPath);
+      // Use Unix socket for Docker Desktop extensions
+      console.log(`Envoy Gateway Extension backend listening on socket: ${socketPath}`);
+      
+      // Make sure the socket doesn't already exist
+      if (fs.existsSync(socketPath)) {
+        fs.unlinkSync(socketPath);
       }
-
-      // Start listening on Unix socket (Docker Desktop extension requirement)
-      this.server.listen(this.socketPath, () => {
-        console.log(`Envoy Gateway Extension backend listening on socket: ${this.socketPath}`);
-        console.log('Backend is healthy and ready to serve requests');
-        console.log('Running in Docker Desktop extension mode');
+      
+      // Listen on the socket
+      this.server.listen(socketPath, () => {
+        console.log(`Envoy Gateway Extension backend started on socket: ${socketPath}`);
+        console.log('Backend is healthy and ready to serve requests via socket');
+        console.log(`Kubernetes connected: ${this.kubernetesConfig.connected}`);
+        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
       });
     } else {
-      // Standalone development mode - use HTTP port
+      // Use HTTP port for development
       this.server.listen(port, '0.0.0.0', () => {
-        console.log(`Envoy Gateway Backend started successfully`);
-        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`Envoy Gateway Backend running on port ${port}`);
-        console.log(`Server listening on all interfaces (0.0.0.0:${port})`);
-        console.log('Backend is healthy and ready to serve requests');
+        console.log(`Envoy Gateway Extension backend listening on port ${port}`);
+        console.log('Backend is healthy and ready to serve requests via HTTP');
         console.log(`Kubernetes connected: ${this.kubernetesConfig.connected}`);
+        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
       });
     }
 
@@ -776,9 +811,6 @@ class EnvoyGatewayBackend {
       console.log('Received SIGTERM, shutting down gracefully');
       this.server.close(() => {
         console.log('Server closed');
-        if (isDockerDesktopExtension && fs.existsSync(this.socketPath)) {
-          fs.unlinkSync(this.socketPath);
-        }
         process.exit(0);
       });
     });
@@ -787,9 +819,6 @@ class EnvoyGatewayBackend {
       console.log('Received SIGINT, shutting down gracefully');
       this.server.close(() => {
         console.log('Server closed');
-        if (isDockerDesktopExtension && fs.existsSync(this.socketPath)) {
-          fs.unlinkSync(this.socketPath);
-        }
         process.exit(0);
       });
     });
