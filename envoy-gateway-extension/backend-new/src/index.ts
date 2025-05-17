@@ -816,7 +816,8 @@ class EnvoyGatewayBackend {
           console.log(`Socket directory ${socketDir} doesn't exist, trying to create...`);
           fs.mkdirSync(socketDir, { recursive: true });
         }
-      } catch (error) {
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
         console.error(`Error checking/preparing socket path: ${error.message}`);
       }
       
