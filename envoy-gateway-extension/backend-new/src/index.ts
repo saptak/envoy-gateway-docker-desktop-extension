@@ -831,15 +831,16 @@ class EnvoyGatewayBackend {
         try {
           fs.chmodSync(socketPath, 0o777);
           console.log(`Set permissions on socket file to 0777`);
-        } catch (error) {
-          console.error(`Error setting socket permissions: ${error.message}`);
+        } catch (permError: unknown) {
+          const errorMsg = permError instanceof Error ? permError.message : 'Unknown error';
+          console.error(`Error setting socket permissions: ${errorMsg}`);
         }
       });
       
       // Handle socket errors
-      this.server.on('error', (error: any) => {
+      this.server.on('error', (error: Error) => {
         console.error(`Socket server error: ${error.message}`);
-        if (error.code === 'EADDRINUSE') {
+        if ('code' in error && error.code === 'EADDRINUSE') {
           console.log('Socket address in use, retrying...');
           setTimeout(() => {
             this.server.close();
