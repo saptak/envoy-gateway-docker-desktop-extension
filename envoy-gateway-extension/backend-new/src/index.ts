@@ -230,15 +230,17 @@ class EnvoyGatewayBackend {
 
     // Health check endpoint
     this.app.get('/api/health', (req, res) => {
-      console.log(`[${req.requestId}] Health check requested`);
+      console.log(`[${req.requestId}] Health check requested from ${req.ip || 'unknown IP'}`);
       const healthData = {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         version: '1.0.0',
-        mode: 'docker-desktop-extension',
+        mode: process.env.DD_EXTENSION === 'true' ? 'docker-desktop-extension' : 'development',
         kubernetes: this.kubernetesConfig.connected,
-        connection: 'socket',
-        context: this.kubernetesConfig.contextName,
+        connection: process.env.DD_EXTENSION === 'true' ? 'socket' : 'http',
+        context: this.kubernetesConfig.contextName || 'none',
+        socketPath: process.env.SOCKET_PATH || 'not set',
+        environment: process.env.NODE_ENV || 'development',
         error: this.kubernetesConfig.error
       };
       res.json(createSuccessResponse(healthData, 'Backend is healthy', req.requestId));
@@ -777,8 +779,15 @@ class EnvoyGatewayBackend {
 
   public start(): void {
     const isDockerDesktopExtension = process.env.DD_EXTENSION === 'true';
+    // Use the Docker Desktop extension socket path
     const socketPath = process.env.SOCKET_PATH || '/run/guest-services/extension-envoy-gateway-extension.sock';
     const port = parseInt(process.env.PORT || '8080', 10);
+    
+    console.log('Starting server with config:');
+    console.log(`- DD_EXTENSION: ${isDockerDesktopExtension}`);
+    console.log(`- Socket path: ${socketPath}`);
+    console.log(`- PORT: ${port}`);
+    console.log(`- NODE_ENV: ${process.env.NODE_ENV}`);
     
     if (isDockerDesktopExtension) {
       // Use Unix socket for Docker Desktop extensions
@@ -786,6 +795,7 @@ class EnvoyGatewayBackend {
       
       // Make sure the socket doesn't already exist
       if (fs.existsSync(socketPath)) {
+        console.log(`Socket file already exists at ${socketPath}, removing it...`);
         fs.unlinkSync(socketPath);
       }
       

@@ -77,7 +77,6 @@ export class ApiClient {
     };
   }
 
-  // Core request method with retry logic
   private async request<T>(
     endpoint: string,
     options: any = {},
@@ -92,9 +91,17 @@ export class ApiClient {
         // Use the proper Docker Desktop client extension API for VM service
         const url = `${this.baseURL}${endpoint}`;
         console.log(`[API] Making request to: ${url} (attempt ${attempt + 1})`);
+
+        // Make sure the ddClient is properly initialized
+        if (!this.ddClient.extension.vm?.service) {
+          console.error('[API] ddClient.extension.vm.service is not available');
+          throw new NetworkError('Docker Desktop VM service is not available');
+        }
         
         // Docker Desktop service only accepts endpoint, no options for GET
-        const response = await this.ddClient.extension.vm?.service?.get(url);
+        const response = await this.ddClient.extension.vm.service.get(url);
+        
+        console.log(`[API] Raw response:`, response);
         
         if (!response) {
           throw new NetworkError('No response from backend service');
@@ -122,6 +129,9 @@ export class ApiClient {
           error: lastError.message,
           attempt: attempt + 1
         });
+
+        // Log the full error for debugging
+        console.error('[API] Full error:', error);
 
         // Check if we should retry
         if (attempt < config.maxRetries && config.retryOn?.(lastError)) {

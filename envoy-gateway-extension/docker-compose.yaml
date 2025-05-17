@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  envoy-gateway-service:
+    image: ${DESKTOP_PLUGIN_IMAGE}
+    restart: always
+    ipc: host
+    volumes:
+      - /run/guest-services:/run/guest-services:ro
+      - /run/host-services/docker.sock:/run/host-services/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${HOME}/.kube:/home/app/.kube:ro
+    environment:
+      - DD_EXTENSION=true
+      - NODE_ENV=production
+      - SOCKET_PATH=/run/guest-services/extension-envoy-gateway-extension.sock
+    privileged: false
