@@ -1,10 +1,7 @@
 {
   "icon": "icon.svg",
   "vm": {
-    "composefile": "docker-compose.yaml",
-    "exposes": {
-      "socket": "extension-envoy-gateway-extension.sock"
-    }
+    "composefile": "docker-compose.yaml"
   },
   "ui": {
     "dashboard-tab": {

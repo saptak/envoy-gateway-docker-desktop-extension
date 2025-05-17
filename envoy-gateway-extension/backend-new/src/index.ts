@@ -788,23 +788,64 @@ class EnvoyGatewayBackend {
     console.log(`- Socket path: ${socketPath}`);
     console.log(`- PORT: ${port}`);
     console.log(`- NODE_ENV: ${process.env.NODE_ENV}`);
+    console.log(`- Current user: ${require('os').userInfo().username}`);
+    console.log(`- Current directory: ${process.cwd()}`);
+    console.log(`- Platform: ${process.platform}`);
+    
+    // Setup CORS to allow all origins
+    this.app.use(cors({
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    }));
     
     if (isDockerDesktopExtension) {
       // Use Unix socket for Docker Desktop extensions
       console.log(`Envoy Gateway Extension backend listening on socket: ${socketPath}`);
       
       // Make sure the socket doesn't already exist
-      if (fs.existsSync(socketPath)) {
-        console.log(`Socket file already exists at ${socketPath}, removing it...`);
-        fs.unlinkSync(socketPath);
+      try {
+        if (fs.existsSync(socketPath)) {
+          console.log(`Socket file already exists at ${socketPath}, removing it...`);
+          fs.unlinkSync(socketPath);
+        }
+        
+        // Ensure the directory exists
+        const socketDir = path.dirname(socketPath);
+        if (!fs.existsSync(socketDir)) {
+          console.log(`Socket directory ${socketDir} doesn't exist, trying to create...`);
+          fs.mkdirSync(socketDir, { recursive: true });
+        }
+      } catch (error) {
+        console.error(`Error checking/preparing socket path: ${error.message}`);
       }
       
-      // Listen on the socket
+      // Listen on the socket with error handling
       this.server.listen(socketPath, () => {
         console.log(`Envoy Gateway Extension backend started on socket: ${socketPath}`);
         console.log('Backend is healthy and ready to serve requests via socket');
         console.log(`Kubernetes connected: ${this.kubernetesConfig.connected}`);
         console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+        
+        // Set permissions on socket file
+        try {
+          fs.chmodSync(socketPath, 0o777);
+          console.log(`Set permissions on socket file to 0777`);
+        } catch (error) {
+          console.error(`Error setting socket permissions: ${error.message}`);
+        }
+      });
+      
+      // Handle socket errors
+      this.server.on('error', (error: any) => {
+        console.error(`Socket server error: ${error.message}`);
+        if (error.code === 'EADDRINUSE') {
+          console.log('Socket address in use, retrying...');
+          setTimeout(() => {
+            this.server.close();
+            this.server.listen(socketPath);
+          }, 1000);
+        }
       });
     } else {
       // Use HTTP port for development

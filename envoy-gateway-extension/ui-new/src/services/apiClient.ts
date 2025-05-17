@@ -77,6 +77,43 @@ export class ApiClient {
     };
   }
 
+export class ApiClient {
+  private ddClient: ReturnType<typeof createDockerDesktopClient>;
+  private baseURL: string;
+  private retryConfig: RetryConfig;
+  private isDebugEnabled: boolean;
+
+  constructor(ddClient: ReturnType<typeof createDockerDesktopClient>) {
+    this.ddClient = ddClient;
+    this.baseURL = '/api';
+    this.isDebugEnabled = true; // Enable debug logging
+    this.retryConfig = {
+      maxRetries: 5, // Increased from 3 to 5
+      initialDelay: 1000,
+      maxDelay: 10000, // Increased from 5000 to 10000
+      backoffMultiplier: 2, // Increased from 1.5 to 2
+      retryOn: (error) => {
+        // Retry on network errors, socket errors, and 5xx responses
+        console.log('[API] Checking if error should trigger retry:', error.message);
+        return error instanceof NetworkError || 
+               (error instanceof ApiError && error.code.includes('CONNECTION')) ||
+               error.message.includes('socket') ||
+               error.message.includes('network') ||
+               error.message.includes('timeout');
+      }
+    };
+    
+    this.debugLog('ApiClient initialized with Docker Desktop client');
+  }
+  
+  // Debug logging helper
+  private debugLog(...args: any[]): void {
+    if (this.isDebugEnabled) {
+      console.log('[API Debug]', ...args);
+    }
+  }
+
+  // Core request method with retry logic and improved error handling
   private async request<T>(
     endpoint: string,
     options: any = {},
@@ -86,29 +123,36 @@ export class ApiClient {
     let lastError: Error | null = null;
     let delay = config.initialDelay;
 
+    this.debugLog(`Beginning request to ${endpoint} with retry config:`, config);
+
     for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
       try {
         // Use the proper Docker Desktop client extension API for VM service
         const url = `${this.baseURL}${endpoint}`;
-        console.log(`[API] Making request to: ${url} (attempt ${attempt + 1})`);
+        this.debugLog(`Making request attempt ${attempt + 1}/${config.maxRetries + 1} to: ${url}`);
 
         // Make sure the ddClient is properly initialized
         if (!this.ddClient.extension.vm?.service) {
-          console.error('[API] ddClient.extension.vm.service is not available');
+          this.debugLog('ddClient.extension.vm.service is not available');
           throw new NetworkError('Docker Desktop VM service is not available');
         }
         
-        // Docker Desktop service only accepts endpoint, no options for GET
-        const response = await this.ddClient.extension.vm.service.get(url);
+        // Add a timeout wrapped promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new NetworkError(`Request timeout after ${8000}ms`));
+          }, 8000);
+        });
         
-        console.log(`[API] Raw response:`, response);
+        // Docker Desktop service request with timeout
+        const requestPromise = this.ddClient.extension.vm.service.get(url);
+        const response = await Promise.race([requestPromise, timeoutPromise]);
+        
+        this.debugLog(`Raw response received:`, response);
         
         if (!response) {
           throw new NetworkError('No response from backend service');
         }
-
-        // Debug the response
-        console.log(`[API] Response received:`, response);
 
         // Check if response is an API error format
         if (response && typeof response === 'object' && 'success' in response) {
@@ -121,7 +165,7 @@ export class ApiClient {
 
         // Legacy response format (fallback)
         return response as T;
-      } catch (error) {
+      } catch (error: any) {
         lastError = error as Error;
         
         console.warn(`API request attempt ${attempt + 1}/${config.maxRetries + 1} failed:`, {
@@ -131,11 +175,14 @@ export class ApiClient {
         });
 
         // Log the full error for debugging
-        console.error('[API] Full error:', error);
+        this.debugLog('Full error details:', error);
 
         // Check if we should retry
-        if (attempt < config.maxRetries && config.retryOn?.(lastError)) {
-          console.info(`Retrying in ${delay}ms...`);
+        const shouldRetry = attempt < config.maxRetries && config.retryOn?.(lastError);
+        this.debugLog(`Should retry? ${shouldRetry}`);
+        
+        if (shouldRetry) {
+          this.debugLog(`Retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           delay = Math.min(delay * config.backoffMultiplier, config.maxDelay);
         } else {
@@ -153,7 +200,7 @@ export class ApiClient {
     throw lastError;
   }
 
-  // POST request with retry
+  // POST request with retry and improved error handling
   private async post<T>(
     endpoint: string,
     data: any,
@@ -163,18 +210,35 @@ export class ApiClient {
     let lastError: Error | null = null;
     let delay = config.initialDelay;
 
+    this.debugLog(`Beginning POST request to ${endpoint} with data:`, data);
+
     for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
       try {
         const url = `${this.baseURL}${endpoint}`;
-        console.log(`[API] Making POST request to: ${url} (attempt ${attempt + 1})`, data);
+        this.debugLog(`Making POST request attempt ${attempt + 1}/${config.maxRetries + 1} to: ${url}`);
         
-        const response = await this.ddClient.extension.vm?.service?.post(url, data);
+        // Make sure the ddClient is properly initialized
+        if (!this.ddClient.extension.vm?.service) {
+          this.debugLog('ddClient.extension.vm.service is not available for POST');
+          throw new NetworkError('Docker Desktop VM service is not available');
+        }
+        
+        // Add a timeout wrapped promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new NetworkError(`POST request timeout after ${10000}ms`));
+          }, 10000);
+        });
+        
+        // Docker Desktop service request with timeout
+        const requestPromise = this.ddClient.extension.vm?.service?.post(url, data);
+        const response = await Promise.race([requestPromise, timeoutPromise]);
+        
+        this.debugLog(`POST raw response received:`, response);
         
         if (!response) {
-          throw new NetworkError('No response from backend service');
+          throw new NetworkError('No response from backend service for POST request');
         }
-
-        console.log(`[API] POST Response received:`, response);
 
         // Check if response is an API error format
         if (response && typeof response === 'object' && 'success' in response) {
@@ -187,7 +251,7 @@ export class ApiClient {
 
         // Legacy response format (fallback)
         return response as T;
-      } catch (error) {
+      } catch (error: any) {
         lastError = error as Error;
         
         console.warn(`API POST attempt ${attempt + 1}/${config.maxRetries + 1} failed:`, {
@@ -196,9 +260,15 @@ export class ApiClient {
           attempt: attempt + 1
         });
 
-        // Check if we should retry (usually don't retry POST requests)
-        if (attempt < config.maxRetries && config.retryOn?.(lastError)) {
-          console.info(`Retrying in ${delay}ms...`);
+        // Log the full error for debugging
+        this.debugLog('POST full error details:', error);
+
+        // Check if we should retry
+        const shouldRetry = attempt < config.maxRetries && config.retryOn?.(lastError);
+        this.debugLog(`Should retry POST? ${shouldRetry}`);
+        
+        if (shouldRetry) {
+          this.debugLog(`Retrying POST in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           delay = Math.min(delay * config.backoffMultiplier, config.maxDelay);
         } else {
@@ -209,7 +279,7 @@ export class ApiClient {
 
     // If no error occurred or if lastError is still null, throw a generic error
     if (!lastError) {
-      throw new NetworkError('Request failed without error details');
+      throw new NetworkError('POST request failed without error details');
     }
 
     throw lastError;

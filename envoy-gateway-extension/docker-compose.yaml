@@ -5,12 +5,12 @@ services:
     restart: always
     ipc: host
     volumes:
-      - /run/guest-services:/run/guest-services:ro
-      - /run/host-services/docker.sock:/run/host-services/docker.sock:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ${HOME}/.kube:/home/app/.kube:ro
+      - /run/guest-services:/run/guest-services:rw
+      - ${HOME}/.kube:/root/.kube:ro
     environment:
       - DD_EXTENSION=true
       - NODE_ENV=production
       - SOCKET_PATH=/run/guest-services/extension-envoy-gateway-extension.sock
-    privileged: false
+    privileged: true
+
