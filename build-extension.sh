@@ -93,9 +93,9 @@ fi
 echo -e "${YELLOW}✅ Validating extension structure...${NC}"
 validation_failed=false
 
-# Check if UI directory exists in image
-if ! docker run --rm "${EXTENSION_IMAGE}" sh -c "test -d /ui"; then
-    echo -e "${RED}❌ UI directory not found in image${NC}"
+# Check if main UI file exists in image
+if ! docker run --rm "${EXTENSION_IMAGE}" sh -c "test -f /ui-new/index.html"; then
+    echo -e "${RED}❌ Main UI file /ui-new/index.html not found in image${NC}"
     validation_failed=true
 fi
 

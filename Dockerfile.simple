@@ -1,0 +1,27 @@
+FROM alpine:latest
+
+LABEL org.opencontainers.image.title="EnvoyGateway" \
+      org.opencontainers.image.description="Docker Desktop extension for managing Envoy Gateway resources" \
+      org.opencontainers.image.vendor="Envoy Gateway Community" \
+      com.docker.desktop.extension.api.version=">= 0.3.4" \
+      com.docker.desktop.extension.icon="icon.svg" \
+      com.docker.extension.categories="networking,kubernetes"
+
+COPY envoy-gateway-extension/ui-new/build /ui
+COPY envoy-gateway-extension/icon.svg /icon.svg
+COPY envoy-gateway-extension/metadata.json /metadata.json
+
+# Create the docker-compose file directly
+RUN printf '%s\n' \
+    'services:' \
+    '  envoy-gateway-service:' \
+    '    image: ${DESKTOP_PLUGIN_IMAGE}' \
+    '    restart: always' \
+    '    volumes:' \
+    '      - /var/run/docker.sock:/var/run/docker.sock:ro' \
+    '      - ${HOME}/.kube:/root/.kube:ro' \
+    '    ports:' \
+    '      - "8080:8080"' \
+    '    environment:' \
+    '      - DD_EXTENSION=true' \
+    '      - NODE_ENV=production' > /docker-compose.yml

@@ -48,6 +48,6 @@ docker extension uninstall envoy-gateway-extension:latest
 - Check extension logs: `docker extension ls`
 
 ## Version
-Built: Fri May 16 14:20:12 PDT 2025
+Built: Fri May 16 19:32:02 PDT 2025
 Version: 1.0.0
-Commit: 35e7b41
+Commit: efd5ea2

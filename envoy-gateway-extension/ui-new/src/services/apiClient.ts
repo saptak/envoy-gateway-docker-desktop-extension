@@ -60,50 +60,31 @@ export class ApiClient {
   private ddClient: ReturnType<typeof createDockerDesktopClient>;
   private baseURL: string;
   private retryConfig: RetryConfig;
-
-  constructor(ddClient: ReturnType<typeof createDockerDesktopClient>) {
-    this.ddClient = ddClient;
-    this.baseURL = '/api';
-    this.retryConfig = {
-      maxRetries: 3,
-      initialDelay: 1000,
-      maxDelay: 5000,
-      backoffMultiplier: 1.5,
-      retryOn: (error) => {
-        // Retry on network errors and 5xx responses
-        return error instanceof NetworkError || 
-               (error instanceof ApiError && error.code.includes('CONNECTION'));
-      }
-    };
-  }
-
-export class ApiClient {
-  private ddClient: ReturnType<typeof createDockerDesktopClient>;
-  private baseURL: string;
-  private retryConfig: RetryConfig;
   private isDebugEnabled: boolean;
 
   constructor(ddClient: ReturnType<typeof createDockerDesktopClient>) {
     this.ddClient = ddClient;
-    this.baseURL = '/api';
+    this.baseURL = 'http://localhost:8080/api';
     this.isDebugEnabled = true; // Enable debug logging
+    
+    this.debugLog('ApiClient initialized with Docker Desktop client');
+    this.debugLog(`Using API endpoint: ${this.baseURL}`);
+    
     this.retryConfig = {
-      maxRetries: 5, // Increased from 3 to 5
+      maxRetries: 5, // Increased for better reliability
       initialDelay: 1000,
-      maxDelay: 10000, // Increased from 5000 to 10000
-      backoffMultiplier: 2, // Increased from 1.5 to 2
+      maxDelay: 10000,
+      backoffMultiplier: 2,
       retryOn: (error) => {
         // Retry on network errors, socket errors, and 5xx responses
         console.log('[API] Checking if error should trigger retry:', error.message);
         return error instanceof NetworkError || 
-               (error instanceof ApiError && error.code.includes('CONNECTION')) ||
+               (error instanceof ApiError && error.code?.includes('CONNECTION')) ||
                error.message.includes('socket') ||
                error.message.includes('network') ||
                error.message.includes('timeout');
       }
     };
-    
-    this.debugLog('ApiClient initialized with Docker Desktop client');
   }
   
   // Debug logging helper
@@ -127,26 +108,24 @@ export class ApiClient {
 
     for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
       try {
-        // Use the proper Docker Desktop client extension API for VM service
         const url = `${this.baseURL}${endpoint}`;
         this.debugLog(`Making request attempt ${attempt + 1}/${config.maxRetries + 1} to: ${url}`);
 
-        // Make sure the ddClient is properly initialized
-        if (!this.ddClient.extension.vm?.service) {
-          this.debugLog('ddClient.extension.vm.service is not available');
-          throw new NetworkError('Docker Desktop VM service is not available');
-        }
-        
-        // Add a timeout wrapped promise
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new NetworkError(`Request timeout after ${8000}ms`));
-          }, 8000);
+        // Direct fetch for all requests
+        const fetchResponse = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          ...options
         });
         
-        // Docker Desktop service request with timeout
-        const requestPromise = this.ddClient.extension.vm.service.get(url);
-        const response = await Promise.race([requestPromise, timeoutPromise]);
+        if (!fetchResponse.ok) {
+          throw new NetworkError(`HTTP error: ${fetchResponse.status} ${fetchResponse.statusText}`);
+        }
+        
+        const response = await fetchResponse.json();
         
         this.debugLog(`Raw response received:`, response);
         
@@ -217,22 +196,21 @@ export class ApiClient {
         const url = `${this.baseURL}${endpoint}`;
         this.debugLog(`Making POST request attempt ${attempt + 1}/${config.maxRetries + 1} to: ${url}`);
         
-        // Make sure the ddClient is properly initialized
-        if (!this.ddClient.extension.vm?.service) {
-          this.debugLog('ddClient.extension.vm.service is not available for POST');
-          throw new NetworkError('Docker Desktop VM service is not available');
-        }
-        
-        // Add a timeout wrapped promise
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new NetworkError(`POST request timeout after ${10000}ms`));
-          }, 10000);
+        // Direct fetch for all requests
+        const fetchResponse = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(data)
         });
         
-        // Docker Desktop service request with timeout
-        const requestPromise = this.ddClient.extension.vm?.service?.post(url, data);
-        const response = await Promise.race([requestPromise, timeoutPromise]);
+        if (!fetchResponse.ok) {
+          throw new NetworkError(`HTTP error: ${fetchResponse.status} ${fetchResponse.statusText}`);
+        }
+        
+        const response = await fetchResponse.json();
         
         this.debugLog(`POST raw response received:`, response);
         
@@ -291,8 +269,6 @@ export class ApiClient {
     data: any,
     customRetryConfig?: Partial<RetryConfig>
   ): Promise<T> {
-    // For now, we'll implement PUT as POST since Docker Desktop client may not have PUT method
-    // This will need to be handled by the backend to differentiate between PUT and POST
     return this.post(endpoint, { ...data, _method: 'PUT' }, customRetryConfig);
   }
 
@@ -301,8 +277,6 @@ export class ApiClient {
     endpoint: string,
     customRetryConfig?: Partial<RetryConfig>
   ): Promise<T> {
-    // For now, we'll implement DELETE as POST since Docker Desktop client may not have DELETE method
-    // This will need to be handled by the backend to differentiate between DELETE and POST
     return this.post(endpoint, { _method: 'DELETE' }, customRetryConfig);
   }
 

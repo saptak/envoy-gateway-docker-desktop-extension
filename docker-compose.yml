@@ -1,28 +1,13 @@
-version: '3.8'
-
+version: "3.9"
 services:
-  envoy-gateway-service:
-    build:
-      context: ./envoy-gateway-extension
-      dockerfile: Dockerfile
+  envoy-gateway-extension:
+    image: ${DESKTOP_PLUGIN_IMAGE}
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${HOME}/.kube:/root/.kube:ro
     ports:
       - "8080:8080"
     environment:
-      - PORT=8080
+      - DD_EXTENSION=true
       - NODE_ENV=production
-      - DD_EXTENSION=false
-    volumes:
-      - ~/.kube/config:/root/.kube/config:ro
-    networks:
-      - envoy-gateway-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-networks:
-  envoy-gateway-network:
-    driver: bridge

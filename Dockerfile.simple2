@@ -1,0 +1,26 @@
+FROM alpine:latest
+
+LABEL org.opencontainers.image.title="Envoy Gateway" \
+      org.opencontainers.image.description="Docker Desktop extension for managing Envoy Gateway resources" \
+      org.opencontainers.image.vendor="Envoy Gateway Community" \
+      com.docker.desktop.extension.api.version=">= 0.3.4" \
+      com.docker.desktop.extension.icon="icon.svg" \
+      com.docker.extension.categories="networking,kubernetes"
+
+# Copy frontend files
+COPY envoy-gateway-extension/ui-new/build /ui
+COPY envoy-gateway-extension/icon.svg /icon.svg
+COPY envoy-gateway-extension/metadata.json /metadata.json
+
+# Create a simple docker-compose file for the backend
+RUN echo 'services:' > /docker-compose.yml && \
+    echo '  backend:' >> /docker-compose.yml && \
+    echo '    image: envoy-gateway-backend:latest' >> /docker-compose.yml && \
+    echo '    restart: always' >> /docker-compose.yml && \
+    echo '    volumes:' >> /docker-compose.yml && \
+    echo '      - ~/.kube:/root/.kube:ro' >> /docker-compose.yml && \
+    echo '    environment:' >> /docker-compose.yml && \
+    echo '      - DD_EXTENSION=true' >> /docker-compose.yml && \
+    echo '      - NODE_ENV=production' >> /docker-compose.yml && \
+    echo '    ports:' >> /docker-compose.yml && \
+    echo '      - "8080:8080"' >> /docker-compose.yml

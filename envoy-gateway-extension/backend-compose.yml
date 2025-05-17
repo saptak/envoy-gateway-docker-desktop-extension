@@ -1,15 +1,16 @@
-version: '3.8'
 services:
-  envoy-gateway-service:
+  backend:
     image: ${DESKTOP_PLUGIN_IMAGE}
     restart: always
+    command: ["node", "/app/dist/index.js"]
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ${HOME}/.kube:/home/app/.kube:ro
+      - type: bind
+        source: ~/.kube/config
+        target: /root/.kube/config
+        read_only: true
     environment:
       - DD_EXTENSION=true
       - NODE_ENV=production
       - PORT=8080
-    privileged: true
     ports:
       - "8080:8080"

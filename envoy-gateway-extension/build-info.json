@@ -1,7 +1,7 @@
 {
-  "buildDate": "2025-05-16T21:19:45Z",
+  "buildDate": "2025-05-17T02:31:36Z",
   "version": "1.0.0",
-  "commit": "35e7b41",
+  "commit": "efd5ea2",
   "mode": "production",
   "dockerImage": "envoy-gateway-extension:latest",
   "platform": "arm64",

@@ -778,14 +778,10 @@ class EnvoyGatewayBackend {
   }
 
   public start(): void {
-    const isDockerDesktopExtension = process.env.DD_EXTENSION === 'true';
-    // Use the Docker Desktop extension socket path
-    const socketPath = process.env.SOCKET_PATH || '/run/guest-services/extension-envoy-gateway-extension.sock';
     const port = parseInt(process.env.PORT || '8080', 10);
     
     console.log('Starting server with config:');
-    console.log(`- DD_EXTENSION: ${isDockerDesktopExtension}`);
-    console.log(`- Socket path: ${socketPath}`);
+    console.log(`- DD_EXTENSION: ${process.env.DD_EXTENSION}`);
     console.log(`- PORT: ${port}`);
     console.log(`- NODE_ENV: ${process.env.NODE_ENV}`);
     console.log(`- Current user: ${require('os').userInfo().username}`);
@@ -799,65 +795,13 @@ class EnvoyGatewayBackend {
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
     }));
     
-    if (isDockerDesktopExtension) {
-      // Use Unix socket for Docker Desktop extensions
-      console.log(`Envoy Gateway Extension backend listening on socket: ${socketPath}`);
-      
-      // Make sure the socket doesn't already exist
-      try {
-        if (fs.existsSync(socketPath)) {
-          console.log(`Socket file already exists at ${socketPath}, removing it...`);
-          fs.unlinkSync(socketPath);
-        }
-        
-        // Ensure the directory exists
-        const socketDir = path.dirname(socketPath);
-        if (!fs.existsSync(socketDir)) {
-          console.log(`Socket directory ${socketDir} doesn't exist, trying to create...`);
-          fs.mkdirSync(socketDir, { recursive: true });
-        }
-      } catch (err: unknown) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        console.error(`Error checking/preparing socket path: ${error.message}`);
-      }
-      
-      // Listen on the socket with error handling
-      this.server.listen(socketPath, () => {
-        console.log(`Envoy Gateway Extension backend started on socket: ${socketPath}`);
-        console.log('Backend is healthy and ready to serve requests via socket');
-        console.log(`Kubernetes connected: ${this.kubernetesConfig.connected}`);
-        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-        
-        // Set permissions on socket file
-        try {
-          fs.chmodSync(socketPath, 0o777);
-          console.log(`Set permissions on socket file to 0777`);
-        } catch (permError: unknown) {
-          const errorMsg = permError instanceof Error ? permError.message : 'Unknown error';
-          console.error(`Error setting socket permissions: ${errorMsg}`);
-        }
-      });
-      
-      // Handle socket errors
-      this.server.on('error', (error: Error) => {
-        console.error(`Socket server error: ${error.message}`);
-        if ('code' in error && error.code === 'EADDRINUSE') {
-          console.log('Socket address in use, retrying...');
-          setTimeout(() => {
-            this.server.close();
-            this.server.listen(socketPath);
-          }, 1000);
-        }
-      });
-    } else {
-      // Use HTTP port for development
-      this.server.listen(port, '0.0.0.0', () => {
-        console.log(`Envoy Gateway Extension backend listening on port ${port}`);
-        console.log('Backend is healthy and ready to serve requests via HTTP');
-        console.log(`Kubernetes connected: ${this.kubernetesConfig.connected}`);
-        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      });
-    }
+    // Use HTTP port for both extension and development
+    this.server.listen(port, '0.0.0.0', () => {
+      console.log(`Envoy Gateway Extension backend listening on port ${port}`);
+      console.log('Backend is healthy and ready to serve requests via HTTP');
+      console.log(`Kubernetes connected: ${this.kubernetesConfig.connected}`);
+      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    });
 
     // Handle graceful shutdown
     process.on('SIGTERM', () => {
