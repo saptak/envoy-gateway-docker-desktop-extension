@@ -123,6 +123,14 @@
             }
         }
 
+        // Try to redirect to the React UI
+        window.onload = function() {
+            log('Trying to redirect to React UI...');
+            setTimeout(function() {
+                window.location.href = '/ui-new/index.html';
+            }, 3000);
+        };
+
         async function checkBackend() {
             try {
                 log('Checking backend connection...');
@@ -130,10 +138,12 @@
                 // Try to fetch from the backend API
                 const response = await fetch('/api/health');
                 if (response.ok) {
-                    const data = await response.json();
-                    log(`Backend connected: ${data.status}`);
-                    updateStatus(true);
-                    backendAvailable = true;
+                    const responseData = await response.json();
+                    // Assuming createSuccessResponse wraps the actual payload in a 'data' property
+                    const healthPayload = responseData.data;
+                    log(`Backend status: ${healthPayload.status}, K8s connected: ${healthPayload.kubernetes}`);
+                    updateStatus(healthPayload.status === 'healthy' && healthPayload.kubernetes);
+                    backendAvailable = true; // Consider backend available if fetch succeeds, UI can show degraded state
                     return true;
                 } else {
                     throw new Error(`HTTP ${response.status}`);
@@ -178,11 +188,11 @@
             try {
                 log('Loading gateways...');
                 const response = await fetch('/api/gateways');
-                const data = await response.json();
-                
-                document.getElementById('gateway-count').textContent = 
-                    `Found ${data.total || 0} gateways`;
-                log(`Loaded ${data.total || 0} gateways`);
+                const responseData = await response.json();
+                const gatewayPayload = responseData.data;
+                document.getElementById('gateway-count').textContent =
+                    `Found ${gatewayPayload.total || gatewayPayload.gateways?.length || 0} gateways`;
+                log(`Loaded ${gatewayPayload.total || gatewayPayload.gateways?.length || 0} gateways`);
             } catch (error) {
                 log(`Failed to load gateways: ${error.message}`);
                 document.getElementById('gateway-count').textContent = 'Failed to load';
@@ -198,11 +208,11 @@
             try {
                 log('Loading routes...');
                 const response = await fetch('/api/routes');
-                const data = await response.json();
-                
-                document.getElementById('route-count').textContent = 
-                    `Found ${data.total || 0} routes`;
-                log(`Loaded ${data.total || 0} routes`);
+                const responseData = await response.json();
+                const routePayload = responseData.data;
+                document.getElementById('route-count').textContent =
+                    `Found ${routePayload.total || routePayload.routes?.length || 0} routes`;
+                log(`Loaded ${routePayload.total || routePayload.routes?.length || 0} routes`);
             } catch (error) {
                 log(`Failed to load routes: ${error.message}`);
                 document.getElementById('route-count').textContent = 'Failed to load';

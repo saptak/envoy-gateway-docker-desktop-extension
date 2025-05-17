@@ -61,12 +61,12 @@ LABEL org.opencontainers.image.title="EnvoyGateway" \
 WORKDIR /
 
 # Copy built React application to serve as the UI
-COPY --from=client-builder --chown=app:nodejs /ui-build/build /ui
+COPY --from=client-builder --chown=app:nodejs /ui-build/build /ui-new
 COPY --from=server-builder --chown=app:nodejs /backend-build/dist /backend
 COPY --from=server-builder --chown=app:nodejs /backend-build/node_modules /backend/node_modules
 
 # Copy extension metadata and assets
-COPY --chown=app:nodejs metadata.json icon.svg ./
+COPY --chown=app:nodejs metadata.json icon.svg simple-ui.html /
 
 # Set environment variables
 ENV NODE_ENV=production \

@@ -1,9 +1,14 @@
 {
   "icon": "icon.svg",
+  "vm": {
+    "image": "${DESKTOP_PLUGIN_IMAGE}",
+    "port": 8080
+  },
   "ui": {
     "dashboard-tab": {
       "title": "EnvoyGateway",
-      "root": "/ui"
+      "root": "/ui-new",
+      "src": "index.html"
     }
   }
 }
