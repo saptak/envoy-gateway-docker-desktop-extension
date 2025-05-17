@@ -3,10 +3,7 @@
   "vm": {
     "image": "${DESKTOP_PLUGIN_IMAGE}",
     "exposes": {
-      "socket": {
-        "path": "/run/guest-services/extension-envoy-gateway-extension.sock",
-        "readOnly": false
-      }
+      "socket": "extension-envoy-gateway-extension.sock"
     }
   },
   "ui": {
