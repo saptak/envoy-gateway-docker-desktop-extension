@@ -66,7 +66,7 @@ COPY --from=server-builder --chown=app:nodejs /backend-build/dist /backend
 COPY --from=server-builder --chown=app:nodejs /backend-build/node_modules /backend/node_modules
 
 # Copy extension metadata and assets
-COPY --chown=app:nodejs metadata.json icon.svg simple-ui.html /
+COPY --chown=app:nodejs metadata.json icon.svg simple-ui.html docker-compose.yaml /
 
 # Set environment variables
 ENV NODE_ENV=production \
